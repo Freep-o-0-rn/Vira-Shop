@@ -4,7 +4,9 @@ import Link from "next/link";
 type Customer={id:string;name:string;email:string};
 type Address={id:string;recipient:string;phone:string;city:string;street:string;building:string;apartment:string;comment:string};
 type Item={id:string;variantId:string|null;selection:{name:string;value:string}[];title:string;quantity:number;unitMinor:string;lineMinor:string};
-type Order={id:string;status:string;paymentStatus:string;totalMinor:string;createdAt:string;address:Address;items:Item[]};
+type Order={id:string;status:string;paymentStatus:string;paymentMethod:string;
+  deliveryMethod:"pickup"|"courier";deliveryFeeMinor:string|null;subtotalMinor:string;totalMinor:string;
+  createdAt:string;address:Address;items:Item[]};
 const EMPTY={recipient:"",phone:"",city:"",street:"",building:"",apartment:"",comment:""};
 const statuses:Record<string,string>={new:"Новая",confirmed:"Подтверждена",packing:"Собирается",shipped:"Отправлена",completed:"Завершена",cancelled:"Отменена"};
 const money=(v:string)=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB"}).format(Number(v)/100);
@@ -114,8 +116,17 @@ export default function AccountPortal(){
       {orders.length?orders.map(o=><article className="buyer-order" key={o.id}>
        <div className="buyer-order-head"><strong>Заказ № {o.id}</strong><span>{statuses[o.status]||o.status}</span></div>
        <small>{new Date(o.createdAt).toLocaleString("ru-RU")} · Оплата не подключена</small>
+       <p className="order-delivery-description">
+         <strong>{o.deliveryMethod==="pickup"?"Самовывоз":"Доставка по адресу"}</strong>
+         {" · "+o.address.recipient+", "+o.address.phone}
+         {o.deliveryMethod==="courier"?" · "+[o.address.city,o.address.street,"д. "+o.address.building].filter(Boolean).join(", "):" · Пункт выдачи согласуется отдельно"}
+       </p>
        <div className="buyer-order-items">{o.items.map((i,k)=><p key={k}>{i.title}{i.variantId?" · арт. "+i.variantId:""}{i.selection?.length?" ("+i.selection.map(s=>s.value).join(" / ")+")":""} × {i.quantity} — {money(i.lineMinor)}</p>)}</div>
-       <strong>Итого: {money(o.totalMinor)}</strong>
+       <div><strong>{o.deliveryMethod==="courier"?"Товары: ":"Итого: "}{money(o.totalMinor)}</strong>
+         {o.deliveryFeeMinor===null?<p className="buyer-muted">Доставка: стоимость уточняется</p>:
+           <p className="buyer-muted">Самовывоз: бесплатно</p>}
+         <small>Статус оплаты: не оплачено · Платёжная система не подключена</small>
+       </div>
       </article>):
       <div className="buyer-muted"><p>Пока нет заказов.</p><Link href="/checkout" className="buyer-link">Оформить первый заказ →</Link></div>}
      </section>

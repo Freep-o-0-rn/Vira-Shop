@@ -1,12 +1,18 @@
 import {NextRequest,NextResponse} from "next/server";
 import {getPool} from "@/lib/server/db";
 import {bad,customerGuard,jsonBody,noStore,object,publicError} from "@/lib/server/customer-auth";
+import {deliveryMethod,deliveryPrice,pickupContact,PAYMENT_METHOD} from "@/lib/checkout-options";
 export const runtime="nodejs";export const dynamic="force-dynamic";
 export async function GET(req:NextRequest){
  try{
   const a=await customerGuard(req);if(a.response)return a.response;
   const r=await getPool().query(`SELECT o.id::text,o.status,o.payment_status AS "paymentStatus",
-      o.total_minor::text AS "totalMinor",o.delivery_address AS address,o.buyer_note AS note,
+      o.total_minor::text AS "totalMinor",
+      o.subtotal_minor::text AS "subtotalMinor",
+      o.delivery_fee_minor::text AS "deliveryFeeMinor",
+      o.delivery_method AS "deliveryMethod",
+      o.payment_method AS "paymentMethod",
+      o.delivery_address AS address,o.buyer_note AS note,
       o.created_at AS "createdAt",
       COALESCE(jsonb_agg(jsonb_build_object('id',i.product_id,'title',i.title,'quantity',i.quantity,
          'unitMinor',i.unit_price_minor::text,'lineMinor',i.line_total_minor::text,
@@ -22,9 +28,14 @@ export async function POST(req:NextRequest){
   const a=await customerGuard(req,true);if(a.response)return a.response;
   let input:Record<string,unknown>|null;try{input=object(await jsonBody(req));}catch{return bad("Некорректный JSON.");}
   const key=input?.key, addressId=input?.addressId,note=input?.note??"";
+  const method=deliveryMethod(input?.deliveryMethod??"courier");
   if(typeof key!=="string"||!/^[a-f0-9-]{36}$/.test(key)||
-    typeof addressId!=="string"||!/^[0-9]{1,19}$/.test(addressId)||
-    typeof note!=="string"||note.length>500)return bad("Укажите адрес и корректный идентификатор заявки.");
+    !method||typeof note!=="string"||note.length>500)return bad("Некорректные параметры заявки.");
+  if(method==="courier"&&(typeof addressId!=="string"||!/^[0-9]{1,19}$/.test(addressId)))
+    return bad("Для доставки выберите сохранённый адрес.");
+  const contact=method==="pickup"?pickupContact(input?.pickupContact):null;
+  if(method==="pickup"&&!contact)
+    return bad("Для самовывоза укажите имя получателя и телефон.");
   const client=await getPool().connect();
   try{
    await client.query("BEGIN");
@@ -33,9 +44,17 @@ export async function POST(req:NextRequest){
    const old=await client.query<{id:string}>(
     "SELECT id::text FROM shop_orders WHERE customer_id=$1 AND client_key=$2",[a.customer!.id,key]);
    if(old.rowCount){await client.query("COMMIT");return NextResponse.json({id:old.rows[0].id,reused:true},{headers:noStore});}
-   const addresses=await client.query(`SELECT recipient,phone,city,street,building,apartment,comment
-     FROM shop_customer_addresses WHERE id=$1 AND customer_id=$2`,[addressId,a.customer!.id]);
-   if(!addresses.rowCount){await client.query("ROLLBACK");return bad("Адрес не найден.",404);}
+   let addressSnapshot:Record<string,unknown>;
+   if(method==="courier"){
+     const addresses=await client.query(`SELECT recipient,phone,city,street,building,apartment,comment
+       FROM shop_customer_addresses WHERE id=$1 AND customer_id=$2`,[addressId,a.customer!.id]);
+     if(!addresses.rowCount){await client.query("ROLLBACK");return bad("Адрес не найден.",404);}
+     addressSnapshot=addresses.rows[0] as Record<string,unknown>;
+   }else{
+     // Pickup point is not assigned until the merchant confirms the request.
+     addressSnapshot={recipient:contact!.recipient,phone:contact!.phone,
+       city:"",street:"",building:"",apartment:"",comment:"",pickupPoint:"pending"};
+   }
    const cart=await client.query<{id:string;variantId:string|null;quantity:number}>(`SELECT product_id AS id,variant_id AS "variantId",quantity
      FROM shop_customer_cart WHERE customer_id=$1 ORDER BY product_id,variant_key`,[a.customer!.id]);
    if(!cart.rows.length){await client.query("ROLLBACK");return bad("Корзина пуста.",409);}
@@ -84,17 +103,24 @@ export async function POST(req:NextRequest){
        await client.query("UPDATE shop_products SET stock_count=stock_count-$1,updated_at=NOW() WHERE id=$2",[p.quantity,p.id]);
      }
    }
+   const fee=deliveryPrice(method);
    const order=await client.query<{id:string}>(`INSERT INTO shop_orders
-      (customer_id,client_key,total_minor,delivery_address,buyer_note)
-      VALUES($1,$2,$3,$4::jsonb,$5) RETURNING id::text`,
-      [a.customer!.id,key,total,JSON.stringify(addresses.rows[0]),note.trim()]);
+      (customer_id,client_key,total_minor,subtotal_minor,delivery_fee_minor,
+        delivery_method,delivery_address,buyer_note,payment_method)
+      VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9) RETURNING id::text`,
+      [a.customer!.id,key,total,total,fee,method,JSON.stringify(addressSnapshot),
+        note.trim(),PAYMENT_METHOD]);
    for(const p of products){
      await client.query(`INSERT INTO shop_order_items(order_id,product_id,title,quantity,unit_price_minor,line_total_minor,variant_id,variant_selection)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,[order.rows[0].id,p.id,p.title,p.quantity,p.priceMinor,p.priceMinor*p.quantity,p.variantId,JSON.stringify(p.selection)]);
    }
    await client.query("DELETE FROM shop_customer_cart WHERE customer_id=$1",[a.customer!.id]);
    await client.query("COMMIT");
-   return NextResponse.json({id:order.rows[0].id,totalMinor:String(total),paymentStatus:"unpaid"},
+   return NextResponse.json({id:order.rows[0].id,totalMinor:String(total),
+     subtotalMinor:String(total),deliveryMethod:method,
+     deliveryFeeMinor:deliveryPrice(method)===null?null:"0",
+     deliveryPricePending:deliveryPrice(method)===null,
+     paymentStatus:"unpaid",paymentMethod:PAYMENT_METHOD,paymentEnabled:false},
      {status:201,headers:noStore});
   }catch(err){try{await client.query("ROLLBACK");}catch{}throw err;}
   finally{client.release();}

@@ -12,7 +12,7 @@ const FullEmojiPicker=dynamic(()=>import("@/components/admin-emoji-picker"),{
   loading:()=> <p className="admin-emoji-loading" role="status">Загружаем эмодзи…</p>
 });
 
-type AdminOrder={id:string;status:string;paymentStatus:string;totalMinor:string;address:{recipient:string;phone:string;city:string;street:string;building:string;apartment:string};note:string;createdAt:string;customerName:string;customerEmail:string;items:{id:string;title:string;quantity:number;lineMinor:string;variantId:string|null;selection:{name:string;value:string}[]}[]};
+type AdminOrder={id:string;status:string;paymentStatus:string;paymentMethod:string;deliveryMethod:"pickup"|"courier";deliveryFeeMinor:string|null;subtotalMinor:string;totalMinor:string;address:{recipient:string;phone:string;city:string;street:string;building:string;apartment:string};note:string;createdAt:string;customerName:string;customerEmail:string;items:{id:string;title:string;quantity:number;lineMinor:string;variantId:string|null;selection:{name:string;value:string}[]}[]};
 const labels:Record<string,string>={new:"Новый",confirmed:"Подтверждён",packing:"Сборка",shipped:"Отправлен",completed:"Завершён",cancelled:"Отменён"};
 const nextSteps:Record<string,string[]>={new:["confirmed","cancelled"],confirmed:["packing","cancelled"],packing:["shipped","cancelled"],shipped:["completed"],completed:[],cancelled:[]};
 const moneyMinor=(amount:string)=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB"}).format(Number(amount)/100);
@@ -320,10 +320,14 @@ export default function AdminDashboard({login}:{login:string}) {
               <span className="admin-pill">{labels[order.status]||order.status}</span></div>
             <div className="admin-order-content">
               <div><h3>Состав</h3>{order.items.map((item,i)=><p key={i}>{item.title}{item.variantId?" · арт. "+item.variantId:""}{item.selection?.length?" ("+item.selection.map(v=>v.value).join(" / ")+")":""} × {item.quantity} — {moneyMinor(item.lineMinor)}</p>)}
-                <strong>Итого: {moneyMinor(order.totalMinor)}</strong><p>Оплата: не подключена</p></div>
-              <div><h3>Адрес получателя</h3>
+                <strong>{order.deliveryMethod==="courier"?"Товары: ":"Итого: "}{moneyMinor(order.totalMinor)}</strong>
+                <p>Доставка: {order.deliveryFeeMinor===null?"стоимость не рассчитана":moneyMinor(order.deliveryFeeMinor)}</p>
+                <p>Оплата: не подключена; средства не списаны</p></div>
+              <div><h3>{order.deliveryMethod==="pickup"?"Самовывоз":"Доставка по адресу"}</h3>
                 <p>{order.address.recipient}, {order.address.phone}</p>
-                <p>{order.address.city}, {order.address.street}, д. {order.address.building}{order.address.apartment?", кв. "+order.address.apartment:""}</p>
+                {order.deliveryMethod==="courier"?
+                   <p>{order.address.city}, {order.address.street}, д. {order.address.building}{order.address.apartment?", кв. "+order.address.apartment:""}</p>:
+                   <p>Пункт и время выдачи необходимо согласовать с покупателем.</p>}
                 {order.note&&<p>Комментарий: {order.note}</p>}</div>
             </div><div className="admin-actions">
               {(nextSteps[order.status]||[]).map(status=>

@@ -431,3 +431,22 @@
 .admin-low-stock{color:#bd7b0c;font-weight:800}
 .admin-no-stock{color:#d24c5a;font-weight:800}
 @media(max-width:720px){.admin-catalog-filters label{min-width:120px}.admin-bulk-fields>button{flex:1}.admin-bulk-panel{padding:11px}}
+
+
+/* Vira Shop 0.14: manual fulfillment options, no payment */
+.checkout-delivery-methods{display:flex;flex-direction:column;gap:10px;border:0;padding:0;margin:18px 0 16px}
+.checkout-delivery-methods legend{font-size:13px;font-weight:800;margin-bottom:10px}
+.checkout-delivery-methods>label{display:flex;align-items:flex-start;gap:11px;border:1px solid #dbe4f3;border-radius:12px;padding:15px 14px;cursor:pointer;background:#fff}
+.checkout-delivery-methods>label.selected{background:#f1f6ff;border-color:#3779ff;box-shadow:inset 0 0 0 1px #3779ff}
+.checkout-delivery-methods input{margin-top:3px;accent-color:#2868e8;flex:none;width:16px;height:16px}
+.checkout-delivery-methods>label span{display:flex;flex-direction:column;gap:6px;min-width:0}
+.checkout-delivery-methods strong{font-size:13px}
+.checkout-delivery-methods small{font-size:11px;color:#71819b;line-height:1.5}
+.checkout-pickup-contact{display:flex;flex-direction:column;gap:12px}
+.checkout-pickup-contact label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700}
+.checkout-pickup-contact input{border:1px solid #dae3f1;border-radius:10px;min-height:42px;padding:9px 12px;font-size:13px}
+.checkout-delivery-line strong{font-size:12px;color:#5d6f88;text-align:right}
+.checkout-order-total{border-top:1px solid #e7ecf5;margin-top:8px;padding-top:15px}
+.checkout-unquoted{margin:7px 0 16px;font-size:11px;color:#9b661e;background:#fff9ed;border:1px solid #fae6c3;border-radius:9px;padding:11px;line-height:1.65}
+.order-delivery-description{font-size:12px;line-height:1.7;color:#64738b}
+@media(max-width:600px){.checkout-delivery-methods>label{padding:11px}.checkout-delivery-line strong{max-width:55%}}

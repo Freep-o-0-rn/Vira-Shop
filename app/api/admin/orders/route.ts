@@ -7,7 +7,11 @@ export async function GET(req:NextRequest){
  try{
   const denied=await adminGuard(req);if(denied)return denied;
   const result=await getPool().query(`SELECT o.id::text,o.status,o.payment_status AS "paymentStatus",
-   o.total_minor::text AS "totalMinor",o.delivery_address AS address,o.buyer_note AS note,
+   o.total_minor::text AS "totalMinor",
+   o.subtotal_minor::text AS "subtotalMinor",
+   o.delivery_fee_minor::text AS "deliveryFeeMinor",
+   o.delivery_method AS "deliveryMethod",o.payment_method AS "paymentMethod",
+   o.delivery_address AS address,o.buyer_note AS note,
    o.created_at AS "createdAt",c.name AS "customerName",c.email AS "customerEmail",
    COALESCE(jsonb_agg(jsonb_build_object('id',i.product_id,'title',i.title,'quantity',i.quantity,
      'unitMinor',i.unit_price_minor::text,'lineMinor',i.line_total_minor::text,'variantId',i.variant_id,'selection',i.variant_selection)
