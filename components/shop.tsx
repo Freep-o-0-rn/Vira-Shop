@@ -264,7 +264,7 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
   };
   const renderProducts=(items:Product[])=><div className="product-grid">
     {items.map(p=><ProductCard key={p.id} p={p} liked={favorites.includes(p.id)}
-      quantity={cart[p.id]||0} onLike={()=>toggleLike(p.id)} onAdd={()=>add(p.id)}/>)}
+      quantity={cart[p.id]||0} onLike={()=>toggleLike(p.id)} onAdd={()=>p.hasVariants?window.location.assign("/product/"+encodeURIComponent(p.id)):add(p.id)}/>)}
   </div>;
   const searchSubmit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); catalogNavigate({q:searchDraft.trim(),category:"",specs:[],page:1},view!=="catalog"); };
   return <>

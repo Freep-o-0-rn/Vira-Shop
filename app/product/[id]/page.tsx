@@ -5,6 +5,7 @@ import { getProduct, listProducts } from "@/lib/server/store";
 import { listCategories } from "@/lib/server/store";
 import { rub } from "@/lib/catalog";
 import ProductGalleryAndCart from "@/components/product-gallery-cart";
+import {loadVariants} from "@/lib/server/variants-store";
 
 export const dynamic="force-dynamic";
 type Params={params:Promise<{id:string}>};
@@ -30,10 +31,11 @@ export default async function ProductPage({params}:Params) {
     </main>;
   }
   if(!product)notFound();
-  const [categoryData,similarData]=await Promise.all([
+  const [categoryData,similarData,variantData]=await Promise.all([
     listCategories().catch(()=>({items:[],source:"demo" as const})),
     listProducts({search:"",category:product.category,sort:"popular",page:1,limit:12,
-      minPrice:null,maxPrice:null,inStock:false}).catch(()=>null)
+      minPrice:null,maxPrice:null,inStock:false}).catch(()=>null),
+    loadVariants(product.id,true).catch(()=>({groups:[],variants:[]}))
   ]);
   const category=categoryData.items.find(c=>c.id===product.category);
   const similar=(similarData?.items ?? []).filter(p=>p.id!==id).slice(0,4);
@@ -44,7 +46,7 @@ export default async function ProductPage({params}:Params) {
     </nav>
     <h1>{product.title}</h1>
     <p className="product-page-subtitle">{product.subtitle}</p>
-    <ProductGalleryAndCart product={product}/>
+    <ProductGalleryAndCart product={product} variantData={variantData}/>
     <section className="product-description-section">
       <h2>О товаре</h2>
       <p>{product.description || "Описание товара пока не добавлено."}</p>

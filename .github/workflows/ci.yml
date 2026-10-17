@@ -44,6 +44,8 @@ jobs:
           timeout 190s node scripts/smoke-catalog.mjs || (cat /tmp/vira-server.log && exit 1)
           echo "Testing customer order API"
           timeout 120s node scripts/smoke-buyers.mjs || (cat /tmp/vira-server.log && exit 1)
+          echo "Testing SKU variants and checkout"
+          timeout 120s node scripts/smoke-variants.mjs || (cat /tmp/vira-server.log && exit 1)
 
   windows-launcher:
     runs-on: windows-latest

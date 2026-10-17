@@ -335,3 +335,45 @@
 .admin-image-status{color:#277742;font-weight:700}
 .admin-image-error{color:#c23a4b;background:#fff1f2;border-radius:8px;padding:9px 11px}
 @media(max-width:600px){.admin-images{padding:12px}.admin-image-gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-image-dropzone{min-height:140px}.admin-image-url>div{flex-direction:column}}
+
+
+/* Vira Shop 0.11: variant matrix editor and product-page selectors */
+.variant-admin-modal{width:min(1120px,96vw);max-width:1120px}
+.variant-help{font-size:12px;color:#71829b;line-height:1.65}
+.variant-group-editor{border:1px solid #e2e9f5;border-radius:14px;padding:17px;margin:16px 0;background:#f9fbff}
+.variant-group-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.variant-group-heading strong{font-size:14px}.variant-group-heading button{background:transparent;border:0;color:#ce4a66;font-size:11px}
+.variant-inline{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.variant-inline label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:#657591}
+.variant-inline input,.variant-inline select,.variant-value-row input{width:100%;min-width:0;padding:11px;border:1px solid #dce5f4;border-radius:9px;background:#fff;color:#273955}
+.variant-option-label{font-size:12px;font-weight:800;margin:15px 0 10px}
+.variant-value-row{display:flex;gap:8px;margin:8px 0;align-items:center}
+.variant-value-row input[type=color]{flex:none;width:47px;padding:2px;height:42px}
+.variant-value-row button{flex:none;min-width:32px;height:35px;border:1px solid #f4d6dc;border-radius:8px;background:#fff4f5;color:#ac3851;font-size:18px}
+.variant-buttons{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:20px 0}
+.variant-buttons button{font-size:12px}
+.variant-bulk{display:flex;gap:10px;flex-wrap:wrap;margin:13px 0}
+.variant-bulk button{border:1px solid #d5e3fa;border-radius:8px;padding:8px 13px;font-size:11px;font-weight:700;color:#3064c8;background:#f4f8ff}
+.variant-table-scroll{overflow:auto;border:1px solid #e7edf7;border-radius:12px}
+.variant-table{width:100%;min-width:610px}
+.variant-table td{vertical-align:middle}
+.variant-table td strong{display:block;max-width:230px;font-size:12px;line-height:1.5}
+.variant-table td small{display:block;font-size:10px;color:#94a0b0;margin-top:5px}
+.variant-table td input[type=number]{max-width:125px;min-width:85px;width:100%;border:1px solid #dae4f4;border-radius:8px;padding:9px}
+.variant-table td button{border:1px solid #d8e5fa;background:#f4f8ff;border-radius:8px;padding:9px;color:#265bc3;white-space:nowrap;font-weight:700;font-size:11px}
+.variant-photo-panel{margin:15px 0;padding:15px;background:#f7faff;border-radius:13px}
+.variant-photo-panel h3{font-size:15px;margin:0 0 8px}
+.product-variant-controls{border-top:1px solid #edf0f5;border-bottom:1px solid #edf0f5;padding:19px 0;margin:20px 0}
+.product-variant-group{margin:0 0 17px;padding:0;border:0;min-width:0}
+.product-variant-group:last-child{margin-bottom:0}
+.product-variant-group legend{display:flex;align-items:center;gap:10px;font-size:13px;color:#28374f;margin-bottom:10px}
+.product-variant-group legend span{color:#647692}
+.product-variant-options{display:flex;flex-wrap:wrap;gap:9px}
+.product-variant-option{display:flex;align-items:center;gap:7px;border:1px solid #dce5f4;border-radius:9px;background:#fff;padding:10px 13px;min-height:42px;color:#39506f;font-size:12px;font-weight:800}
+.product-variant-option.selected{border-color:#2767fa;box-shadow:inset 0 0 0 1px #2767fa;background:#eef5ff;color:#1e5bd8}
+.product-variant-option:disabled{opacity:.35;text-decoration:line-through;cursor:not-allowed}
+.product-variant-option.color{padding:8px 12px}
+.product-variant-dot{display:inline-block;width:23px;height:23px;border:1px solid #0002;border-radius:50%;flex:none}
+.product-variant-option.image img{width:42px;height:42px;border-radius:6px;object-fit:cover}
+.product-variant-article{font-size:11px;color:#90a0b7;margin:12px 0 0}
+@media(max-width:620px){.variant-inline{grid-template-columns:1fr}.variant-group-editor{padding:12px}.variant-value-row{flex-wrap:wrap}.variant-admin-modal{width:100%}.product-variant-option{font-size:11px}}

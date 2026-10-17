@@ -33,11 +33,16 @@ export async function PATCH(req:NextRequest,{params}:Ctx){
    }
    if(next==="cancelled"){
     // Restore reserved inventory exactly once while order row is locked.
-    const items=await client.query<{product_id:string;quantity:number}>(
-      "SELECT product_id,quantity FROM shop_order_items WHERE order_id=$1 ORDER BY product_id",[id]);
-    for(const item of items.rows)await client.query(
-      "UPDATE shop_products SET stock_count=stock_count+$1,updated_at=NOW() WHERE id=$2",
-      [item.quantity,item.product_id]);
+    const items=await client.query<{product_id:string;variant_id:string|null;quantity:number}>(
+      "SELECT product_id,variant_id,quantity FROM shop_order_items WHERE order_id=$1 ORDER BY product_id,variant_id",[id]);
+    for(const item of items.rows){
+      if(item.variant_id)await client.query(
+        "UPDATE shop_product_variants SET stock_count=stock_count+$1,updated_at=NOW() WHERE article=$2",
+        [item.quantity,item.variant_id]);
+      else await client.query(
+        "UPDATE shop_products SET stock_count=stock_count+$1,updated_at=NOW() WHERE id=$2",
+        [item.quantity,item.product_id]);
+    }
    }
    await client.query("UPDATE shop_orders SET status=$2,updated_at=NOW() WHERE id=$1",[id,next]);
    await client.query("COMMIT");

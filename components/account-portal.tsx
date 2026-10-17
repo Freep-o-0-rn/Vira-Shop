@@ -3,7 +3,7 @@ import {useEffect,useState,type FormEvent} from "react";
 import Link from "next/link";
 type Customer={id:string;name:string;email:string};
 type Address={id:string;recipient:string;phone:string;city:string;street:string;building:string;apartment:string;comment:string};
-type Item={id:string;title:string;quantity:number;unitMinor:string;lineMinor:string};
+type Item={id:string;variantId:string|null;selection:{name:string;value:string}[];title:string;quantity:number;unitMinor:string;lineMinor:string};
 type Order={id:string;status:string;paymentStatus:string;totalMinor:string;createdAt:string;address:Address;items:Item[]};
 const EMPTY={recipient:"",phone:"",city:"",street:"",building:"",apartment:"",comment:""};
 const statuses:Record<string,string>={new:"Новая",confirmed:"Подтверждена",packing:"Собирается",shipped:"Отправлена",completed:"Завершена",cancelled:"Отменена"};
@@ -114,7 +114,7 @@ export default function AccountPortal(){
       {orders.length?orders.map(o=><article className="buyer-order" key={o.id}>
        <div className="buyer-order-head"><strong>Заказ № {o.id}</strong><span>{statuses[o.status]||o.status}</span></div>
        <small>{new Date(o.createdAt).toLocaleString("ru-RU")} · Оплата не подключена</small>
-       <div className="buyer-order-items">{o.items.map((i,k)=><p key={k}>{i.title} × {i.quantity} — {money(i.lineMinor)}</p>)}</div>
+       <div className="buyer-order-items">{o.items.map((i,k)=><p key={k}>{i.title}{i.variantId?" · арт. "+i.variantId:""}{i.selection?.length?" ("+i.selection.map(s=>s.value).join(" / ")+")":""} × {i.quantity} — {money(i.lineMinor)}</p>)}</div>
        <strong>Итого: {money(o.totalMinor)}</strong>
       </article>):
       <div className="buyer-muted"><p>Пока нет заказов.</p><Link href="/checkout" className="buyer-link">Оформить первый заказ →</Link></div>}

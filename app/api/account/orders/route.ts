@@ -9,7 +9,8 @@ export async function GET(req:NextRequest){
       o.total_minor::text AS "totalMinor",o.delivery_address AS address,o.buyer_note AS note,
       o.created_at AS "createdAt",
       COALESCE(jsonb_agg(jsonb_build_object('id',i.product_id,'title',i.title,'quantity',i.quantity,
-         'unitMinor',i.unit_price_minor::text,'lineMinor',i.line_total_minor::text)
+         'unitMinor',i.unit_price_minor::text,'lineMinor',i.line_total_minor::text,
+         'variantId',i.variant_id,'selection',i.variant_selection)
          ORDER BY i.id) FILTER(WHERE i.id IS NOT NULL),'[]'::jsonb) AS items
     FROM shop_orders o LEFT JOIN shop_order_items i ON i.order_id=o.id
     WHERE o.customer_id=$1 GROUP BY o.id ORDER BY o.created_at DESC LIMIT 100`,[a.customer!.id]);
@@ -35,37 +36,61 @@ export async function POST(req:NextRequest){
    const addresses=await client.query(`SELECT recipient,phone,city,street,building,apartment,comment
      FROM shop_customer_addresses WHERE id=$1 AND customer_id=$2`,[addressId,a.customer!.id]);
    if(!addresses.rowCount){await client.query("ROLLBACK");return bad("Адрес не найден.",404);}
-   const cart=await client.query<{id:string;quantity:number}>(`SELECT product_id AS id,quantity
-     FROM shop_customer_cart WHERE customer_id=$1 ORDER BY product_id`,[a.customer!.id]);
+   const cart=await client.query<{id:string;variantId:string|null;quantity:number}>(`SELECT product_id AS id,variant_id AS "variantId",quantity
+     FROM shop_customer_cart WHERE customer_id=$1 ORDER BY product_id,variant_key`,[a.customer!.id]);
    if(!cart.rows.length){await client.query("ROLLBACK");return bad("Корзина пуста.",409);}
    if(cart.rows.length>50){await client.query("ROLLBACK");return bad("Слишком много позиций.",409);}
    let total=0;
-   const products:{id:string;title:string;priceMinor:number;quantity:number}[]=[];
+   const products:{id:string;variantId:string|null;selection:{name:string;value:string}[];title:string;priceMinor:number;quantity:number}[]=[];
    for(const line of cart.rows){
      const item=await client.query<{title:string;price_minor:string;stock_count:number;active:boolean}>(`SELECT p.title,p.price_minor::text,p.stock_count,
         (p.is_active AND c.is_active) AS active FROM shop_products p JOIN shop_categories c ON c.id=p.category_id
         WHERE p.id=$1 FOR UPDATE OF p`,[line.id]);
-     if(!item.rowCount||!item.rows[0].active||item.rows[0].stock_count<line.quantity){
-       await client.query("ROLLBACK");return bad("Товар "+line.id+" закончился или недоступен. Обновите корзину.",409);
+     if(!item.rowCount||!item.rows[0].active){
+       await client.query("ROLLBACK");return bad("Товар "+line.id+" недоступен.",409);
      }
-     const priceMinor=Number(item.rows[0].price_minor);
+     const groups=await client.query<{variant_groups:unknown}>("SELECT variant_groups FROM shop_products WHERE id=$1",[line.id]);
+     const variantMode=Array.isArray(groups.rows[0].variant_groups)&&groups.rows[0].variant_groups.length>0;
+     let priceMinor=Number(item.rows[0].price_minor);
+     let stock=item.rows[0].stock_count;
+     let selection:{name:string;value:string}[]=[];
+     if(line.variantId){
+       if(!variantMode){await client.query("ROLLBACK");return bad("У товара нет вариантов.",409);}
+       const variant=await client.query<{price_minor:string;stock_count:number;is_active:boolean;selection:{name:string;value:string}[]}>(`
+         SELECT price_minor::text,stock_count,is_active,selection
+         FROM shop_product_variants WHERE article=$1 AND product_id=$2 FOR UPDATE`,[line.variantId,line.id]);
+       if(!variant.rowCount||!variant.rows[0].is_active){
+         await client.query("ROLLBACK");return bad("Выбранный вариант недоступен.",409);
+       }
+       priceMinor=Number(variant.rows[0].price_minor);
+       stock=variant.rows[0].stock_count;
+       selection=variant.rows[0].selection;
+     }else if(variantMode){
+       await client.query("ROLLBACK");return bad("Для товара "+line.id+" сначала выберите вариант.",409);
+     }
+     if(stock<line.quantity){
+       await client.query("ROLLBACK");return bad("Недостаточно товара или выбранного варианта.",409);
+     }
      if(!Number.isSafeInteger(priceMinor)||priceMinor<0)throw Error("Invalid DB price");
      const lineTotal=priceMinor*line.quantity;
      if(!Number.isSafeInteger(total+lineTotal))throw Error("Order total outside safe limit");
      total+=lineTotal;
-     products.push({id:line.id,title:item.rows[0].title,priceMinor,quantity:line.quantity});
+     products.push({id:line.id,variantId:line.variantId,selection,title:item.rows[0].title,priceMinor,quantity:line.quantity});
    }
    for(const p of products){
-     await client.query("UPDATE shop_products SET stock_count=stock_count-$1,updated_at=NOW() WHERE id=$2",
-        [p.quantity,p.id]);
+     if(p.variantId){
+       await client.query("UPDATE shop_product_variants SET stock_count=stock_count-$1,updated_at=NOW() WHERE article=$2",[p.quantity,p.variantId]);
+     }else{
+       await client.query("UPDATE shop_products SET stock_count=stock_count-$1,updated_at=NOW() WHERE id=$2",[p.quantity,p.id]);
+     }
    }
    const order=await client.query<{id:string}>(`INSERT INTO shop_orders
       (customer_id,client_key,total_minor,delivery_address,buyer_note)
       VALUES($1,$2,$3,$4::jsonb,$5) RETURNING id::text`,
       [a.customer!.id,key,total,JSON.stringify(addresses.rows[0]),note.trim()]);
    for(const p of products){
-     await client.query(`INSERT INTO shop_order_items(order_id,product_id,title,quantity,unit_price_minor,line_total_minor)
-       VALUES($1,$2,$3,$4,$5,$6)`,[order.rows[0].id,p.id,p.title,p.quantity,p.priceMinor,p.priceMinor*p.quantity]);
+     await client.query(`INSERT INTO shop_order_items(order_id,product_id,title,quantity,unit_price_minor,line_total_minor,variant_id,variant_selection)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,[order.rows[0].id,p.id,p.title,p.quantity,p.priceMinor,p.priceMinor*p.quantity,p.variantId,JSON.stringify(p.selection)]);
    }
    await client.query("DELETE FROM shop_customer_cart WHERE customer_id=$1",[a.customer!.id]);
    await client.query("COMMIT");

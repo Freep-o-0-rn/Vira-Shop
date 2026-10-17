@@ -21,11 +21,12 @@ type Row = {
   id: string; title: string; subtitle: string; category: string;
   price_minor: string; old_price_minor: string | null;
   rating: string; reviews: number; image_url: string; badge: string | null;
-  description: string; stock_count: number; images: string[] | null; specs: ProductSpec[] | null;
+  description: string; stock_count: number; images: string[] | null; specs: ProductSpec[] | null; has_variants: boolean;
 };
 const columns = `p.id, p.title, p.subtitle, p.category_id AS category,
  p.price_minor::text, p.old_price_minor::text, p.rating::text, p.reviews,
- p.image_url, p.badge, p.description, p.stock_count, p.images, p.specs`;
+ p.image_url, p.badge, p.description, p.stock_count, p.images, p.specs,
+ (p.variant_groups <> '[]'::jsonb) AS has_variants`;
 
 function mapProduct(row: Row): Product {
   const images = Array.isArray(row.images) && row.images.length ? row.images :
@@ -37,7 +38,7 @@ function mapProduct(row: Row): Product {
     rating: Number(row.rating), reviews: row.reviews, image: images[0] ?? "",
     images, specs: Array.isArray(row.specs) ? row.specs : [],
     ...(row.badge ? { badge: row.badge } : {}),
-    description: row.description, stock: row.stock_count,
+    description: row.description, stock: row.stock_count, hasVariants:row.has_variants,
   };
 }
 function demoProduct(p: Product): Product {

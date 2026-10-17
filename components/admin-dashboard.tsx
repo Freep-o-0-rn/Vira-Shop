@@ -9,7 +9,7 @@ const FullEmojiPicker=dynamic(()=>import("@/components/admin-emoji-picker"),{
   loading:()=> <p className="admin-emoji-loading" role="status">Загружаем эмодзи…</p>
 });
 
-type AdminOrder={id:string;status:string;paymentStatus:string;totalMinor:string;address:{recipient:string;phone:string;city:string;street:string;building:string;apartment:string};note:string;createdAt:string;customerName:string;customerEmail:string;items:{id:string;title:string;quantity:number;lineMinor:string}[]};
+type AdminOrder={id:string;status:string;paymentStatus:string;totalMinor:string;address:{recipient:string;phone:string;city:string;street:string;building:string;apartment:string};note:string;createdAt:string;customerName:string;customerEmail:string;items:{id:string;title:string;quantity:number;lineMinor:string;variantId:string|null;selection:{name:string;value:string}[]}[]};
 const labels:Record<string,string>={new:"Новый",confirmed:"Подтверждён",packing:"Сборка",shipped:"Отправлен",completed:"Завершён",cancelled:"Отменён"};
 const nextSteps:Record<string,string[]>={new:["confirmed","cancelled"],confirmed:["packing","cancelled"],packing:["shipped","cancelled"],shipped:["completed"],completed:[],cancelled:[]};
 const moneyMinor=(amount:string)=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB"}).format(Number(amount)/100);
@@ -190,7 +190,7 @@ export default function AdminDashboard({login}:{login:string}) {
               <small>{new Date(order.createdAt).toLocaleString("ru-RU")} · {order.customerName} ({order.customerEmail})</small></div>
               <span className="admin-pill">{labels[order.status]||order.status}</span></div>
             <div className="admin-order-content">
-              <div><h3>Состав</h3>{order.items.map((item,i)=><p key={i}>{item.title} × {item.quantity} — {moneyMinor(item.lineMinor)}</p>)}
+              <div><h3>Состав</h3>{order.items.map((item,i)=><p key={i}>{item.title}{item.variantId?" · арт. "+item.variantId:""}{item.selection?.length?" ("+item.selection.map(v=>v.value).join(" / ")+")":""} × {item.quantity} — {moneyMinor(item.lineMinor)}</p>)}
                 <strong>Итого: {moneyMinor(order.totalMinor)}</strong><p>Оплата: не подключена</p></div>
               <div><h3>Адрес получателя</h3>
                 <p>{order.address.recipient}, {order.address.phone}</p>

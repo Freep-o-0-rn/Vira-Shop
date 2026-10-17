@@ -10,7 +10,7 @@ export async function GET(req:NextRequest){
    o.total_minor::text AS "totalMinor",o.delivery_address AS address,o.buyer_note AS note,
    o.created_at AS "createdAt",c.name AS "customerName",c.email AS "customerEmail",
    COALESCE(jsonb_agg(jsonb_build_object('id',i.product_id,'title',i.title,'quantity',i.quantity,
-     'unitMinor',i.unit_price_minor::text,'lineMinor',i.line_total_minor::text)
+     'unitMinor',i.unit_price_minor::text,'lineMinor',i.line_total_minor::text,'variantId',i.variant_id,'selection',i.variant_selection)
      ORDER BY i.id) FILTER(WHERE i.id IS NOT NULL),'[]'::jsonb) AS items
    FROM shop_orders o JOIN shop_customers c ON c.id=o.customer_id
    LEFT JOIN shop_order_items i ON i.order_id=o.id
