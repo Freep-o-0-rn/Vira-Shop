@@ -17,17 +17,14 @@ export async function GET(req:NextRequest){
   if(page<1||limit<1||limit>100)return NextResponse.json({error:"Неверный номер страницы или лимит."},{status:400});
   const params:unknown[]=[],where:string[]=[];
   if(q){
-    if(/^[0-9]+$/.test(q)){
-      params.push(q);
-      where.push("o.id::text=$"+params.length);
-    }else{
-      params.push("%"+q.replace(/[\\%_]/g,"\\  if(q){
-    params.push("%"+q.replace(/[\\%_]/g,"\\$&")+"%");
+    params.push(q);
     const p="$"+params.length;
-    where.push(`(o.id::text ILIKE ${p} ESCAPE '\\' OR c.name ILIKE ${p} ESCAPE '\\' OR c.email ILIKE ${p} ESCAPE '\\')`);
-  }")+"%");
-      const p="$"+params.length;
-      where.push(`(c.name ILIKE ${p} ESCAPE '\\' OR c.email ILIKE ${p} ESCAPE '\\')`);
+    if(/^[0-9]+$/.test(q)){
+      where.push("o.id::text="+p);
+    }else{
+      // strpos searches literal text, so percent signs/underscores are not SQL wildcards.
+      where.push("(strpos(lower(c.name),lower("+p+"::text))>0 OR "+
+        "strpos(lower(c.email),lower("+p+"::text))>0)");
     }
   }
   if(status!=="all"){params.push(status);where.push("o.status=$"+params.length);}
