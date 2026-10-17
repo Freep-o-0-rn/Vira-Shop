@@ -5,6 +5,8 @@ export type ProductInput = {
   subtitle: string;
   description: string;
   image: string;
+  images: string[];
+  specs: { name: string; value: string }[];
   badge: string | null;
   priceMinor: number;
   oldPriceMinor: number | null;
@@ -44,6 +46,31 @@ export function productInput(value: unknown): { data: ProductInput } | { error: 
   if (subtitle.length > 500 || description.length > 10000 || (badge?.length ?? 0) > 50 || !validImage(image)) {
     return { error: "Некорректное описание, значок или адрес изображения (разрешён HTTPS или /uploads/)." };
   }
+  const proposedImages = obj.images === undefined ? (image ? [image] : []) : obj.images;
+  if (!Array.isArray(proposedImages) || proposedImages.length > 8 ||
+      proposedImages.some((entry: unknown) => typeof entry !== "string" || !entry || !validImage(entry))) {
+    return { error: "Можно указать до 8 корректных HTTPS-фотографий." };
+  }
+  const images = [...new Set(proposedImages as string[])];
+  if (image && !images.includes(image)) images.unshift(image);
+  if (images.length > 8) return { error: "Не более 8 изображений." };
+  if (image && images[0] !== image) {
+    const index=images.indexOf(image); if(index>=0)images.splice(index,1);
+    images.unshift(image);
+  }
+  const inputSpecs = obj.specs === undefined ? [] : obj.specs;
+  if (!Array.isArray(inputSpecs) || inputSpecs.length > 20 ||
+      inputSpecs.some((item: unknown) =>
+        !item || typeof item !== "object" || Array.isArray(item) ||
+        typeof (item as {name?:unknown}).name !== "string" ||
+        typeof (item as {value?:unknown}).value !== "string" ||
+        !(item as {name:string}).name.trim() ||
+        (item as {name:string}).name.length > 80 ||
+        !(item as {value:string}).value.trim() ||
+        (item as {value:string}).value.length > 200)) {
+    return { error: "Характеристики: до 20 пар «название — значение»." };
+  }
+  const specs = (inputSpecs as {name:string;value:string}[]).map(s=>({name:s.name.trim(),value:s.value.trim()}));
   const priceMinor = amountToMinor(obj.price);
   const oldPriceMinor = obj.oldPrice === "" || obj.oldPrice === null || obj.oldPrice === undefined ? null : amountToMinor(obj.oldPrice);
   if (priceMinor === null || (obj.oldPrice !== "" && obj.oldPrice !== undefined && obj.oldPrice !== null && oldPriceMinor === null)) {
@@ -56,7 +83,7 @@ export function productInput(value: unknown): { data: ProductInput } | { error: 
   if (typeof obj.active !== "boolean") return { error: "Укажите статус товара." };
   return {
     data: { id: obj.id, category: obj.category, title: obj.title.trim(),
-      subtitle, description, badge, image, priceMinor, oldPriceMinor, stock, active: obj.active }
+      subtitle, description, badge, image: images[0] ?? '', images, specs, priceMinor, oldPriceMinor, stock, active: obj.active }
   };
 }
 export function categoryInput(value: unknown): { data: { id: string; title: string; emoji: string; tone: string; active: boolean } } | { error: string } {

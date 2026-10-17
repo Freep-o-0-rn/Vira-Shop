@@ -21,9 +21,9 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
     const result = await getPool().query(
       `UPDATE shop_products
        SET category_id=$2,title=$3,subtitle=$4,description=$5,price_minor=$6,old_price_minor=$7,
-           image_url=$8,badge=$9,stock_count=$10,is_active=$11,updated_at=NOW()
+           image_url=$8,badge=$9,stock_count=$10,is_active=$11,images=$12,specs=$13::jsonb,updated_at=NOW()
        WHERE id=$1 RETURNING id`,
-      [p.id,p.category,p.title,p.subtitle,p.description,p.priceMinor,p.oldPriceMinor,p.image,p.badge,p.stock,p.active]
+      [p.id,p.category,p.title,p.subtitle,p.description,p.priceMinor,p.oldPriceMinor,p.image,p.badge,p.stock,p.active,p.images,JSON.stringify(p.specs)]
     );
     if (!result.rowCount) return NextResponse.json({ error: "Товар не найден." }, { status: 404 });
     return NextResponse.json({ id: result.rows[0].id });

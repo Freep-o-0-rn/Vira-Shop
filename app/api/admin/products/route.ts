@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       `SELECT p.id, p.title, p.subtitle, p.description, p.category_id AS category,
               ROUND(p.price_minor::numeric / 100, 2)::text AS price,
               CASE WHEN p.old_price_minor IS NULL THEN NULL ELSE ROUND(p.old_price_minor::numeric / 100, 2)::text END AS "oldPrice",
-              p.image_url AS image, p.badge, p.stock_count AS stock, p.is_active AS active,
+              p.image_url AS image, p.images, p.specs, p.badge, p.stock_count AS stock, p.is_active AS active,
               p.created_at AS "createdAt"
          FROM shop_products p ORDER BY p.created_at DESC, p.id ASC LIMIT 1000`
     );
@@ -32,9 +32,9 @@ export async function POST(request: NextRequest) {
     const p = input.data;
     const result = await getPool().query(
       `INSERT INTO shop_products
-       (id, category_id, title, subtitle, description, price_minor, old_price_minor, image_url, badge, stock_count, is_active)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-      [p.id,p.category,p.title,p.subtitle,p.description,p.priceMinor,p.oldPriceMinor,p.image,p.badge,p.stock,p.active]
+       (id, category_id, title, subtitle, description, price_minor, old_price_minor, image_url, badge, stock_count, is_active, images, specs)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb) RETURNING id`,
+      [p.id,p.category,p.title,p.subtitle,p.description,p.priceMinor,p.oldPriceMinor,p.image,p.badge,p.stock,p.active,p.images,JSON.stringify(p.specs)]
     );
     return NextResponse.json({ id: result.rows[0].id }, { status: 201 });
   } catch (err) { return err instanceof SyntaxError || (err instanceof Error && err.message.startsWith("Content-Type")) ?

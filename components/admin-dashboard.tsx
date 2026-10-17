@@ -4,12 +4,12 @@ import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } fr
 type Category = { id: string; title: string; emoji: string; tone: string; active: boolean; productCount: number };
 type Product = {
   id: string; category: string; title: string; subtitle: string; description: string;
-  image: string; badge: string | null; price: string; oldPrice: string | null; stock: number; active: boolean;
+  image: string; images: string[]; specs: {name:string;value:string}[]; badge: string | null; price: string; oldPrice: string | null; stock: number; active: boolean;
 };
 type FormProduct = { id: string; category: string; title: string; subtitle: string; description: string;
-  image: string; badge: string; price: string; oldPrice: string; stock: string; active: boolean };
+  image: string; extraImages: string; specsText: string; badge: string; price: string; oldPrice: string; stock: string; active: boolean };
 type FormCategory = { id: string; title: string; emoji: string; tone: string; active: boolean };
-const blankProduct = (): FormProduct => ({ id:"", category:"",title:"",subtitle:"",description:"",image:"",badge:"",price:"",oldPrice:"",stock:"0",active:true });
+const blankProduct = (): FormProduct => ({ id:"", category:"",title:"",subtitle:"",description:"",image:"",extraImages:"",specsText:"",badge:"",price:"",oldPrice:"",stock:"0",active:true });
 const blankCategory = (): FormCategory => ({ id:"",title:"",emoji:"📦",tone:"blue",active:true });
 const price = (s: string | null) => s === null ? "—" : new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB",maximumFractionDigits:2}).format(Number(s));
 async function api<T = unknown>(url: string, init?: RequestInit): Promise<T> {
@@ -51,14 +51,22 @@ export default function AdminDashboard({login}:{login:string}) {
   },[refresh]);
   const notice=(message:string)=>{setError("");setSuccess(message);};
   const startAddProduct=()=>{setEditingProduct({...blankProduct(),category:categories.find(c=>c.active)?.id || categories[0]?.id || ""});setExistingProduct(false);setError("");setSuccess("");};
-  const editProduct=(p:Product)=>{setEditingProduct({...p,oldPrice:p.oldPrice??"",badge:p.badge??"",stock:String(p.stock)});setExistingProduct(true);setError("");setSuccess("");};
+  const editProduct=(p:Product)=>{setEditingProduct({...p,extraImages:(p.images||[]).filter(x=>x!==p.image).join("\n"),specsText:(p.specs||[]).map(s=>s.name+": "+s.value).join("\n"),oldPrice:p.oldPrice??"",badge:p.badge??"",stock:String(p.stock)});setExistingProduct(true);setError("");setSuccess("");};
   const startAddCategory=()=>{setEditingCategory(blankCategory());setExistingCategory(false);setError("");setSuccess("");};
   const editCategory=(c:Category)=>{setEditingCategory({...c});setExistingCategory(true);setError("");setSuccess("");};
   async function saveProduct(event:FormEvent<HTMLFormElement>){
     event.preventDefault();if(!editingProduct)return;
     setPending(true);setError("");setSuccess("");
     try{
-      const payload={...editingProduct,stock:Number(editingProduct.stock)};
+      const extra=editingProduct.extraImages.split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean);
+      const specs=editingProduct.specsText.split(/\\r?\\n/).map(line=>line.trim()).filter(Boolean).map(line=>{
+        const separator=line.indexOf(":");
+        if(separator<=0||!line.slice(separator+1).trim())throw Error("Каждую характеристику укажите как «Название: Значение».");
+        return {name:line.slice(0,separator).trim(),value:line.slice(separator+1).trim()};
+      });
+      const images=[...new Set([editingProduct.image.trim(),...extra].filter(Boolean))];
+      if(images.length>8)throw Error("Можно добавить не более 8 фотографий.");
+      const payload={...editingProduct,images,specs,stock:Number(editingProduct.stock)};
       await api(existingProduct ? "/api/admin/products/"+encodeURIComponent(editingProduct.id):"/api/admin/products",{
         method:existingProduct?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)
       });
@@ -95,7 +103,12 @@ export default function AdminDashboard({login}:{login:string}) {
     try{
       const body=new FormData();body.set("image",file);
       const result=await api<{url:string}>("/api/admin/upload",{method:"POST",body});
-      setEditingProduct(old=>old?{...old,image:result.url}:old);
+      setEditingProduct(old=>{
+        if(!old)return old;
+        if(!old.image)return {...old,image:result.url};
+        const existing=old.extraImages.split(/\\r?\\n/).filter(Boolean);
+        return {...old,extraImages:[...existing,result.url].join("\\n")};
+      });
       setSuccess("Фотография загружена. Нажмите «Сохранить товар», чтобы привязать её.");
     }catch(e){setError(e instanceof Error?e.message:"Ошибка загрузки.");}
     finally{setPending(false);event.target.value="";}
@@ -151,8 +164,14 @@ export default function AdminDashboard({login}:{login:string}) {
           <label>Плашка (необязательно)<input maxLength={50} value={editingProduct.badge} placeholder="Новинка" onChange={e=>setEditingProduct({...editingProduct,badge:e.target.value})}/></label>
           <label className="full">Описание<textarea rows={3} value={editingProduct.description} maxLength={10000} onChange={e=>setEditingProduct({...editingProduct,description:e.target.value})}/></label>
           <label className="full">URL изображения (HTTPS или /uploads/)<input value={editingProduct.image} placeholder="https://..." onChange={e=>setEditingProduct({...editingProduct,image:e.target.value})}/></label>
+          <label className="full">Дополнительные фотографии (HTTPS-ссылки, по одной на строку; всего не более 8)
+            <textarea rows={3} value={editingProduct.extraImages} placeholder={"https://.../photo-2.jpg\\nhttps://.../photo-3.jpg"}
+              onChange={e=>setEditingProduct({...editingProduct,extraImages:e.target.value})}/></label>
+          <label className="full">Характеристики (каждая с новой строки: Название: Значение)
+            <textarea rows={4} value={editingProduct.specsText} placeholder={"Цвет: Чёрный\\nМатериал: Пластик"}
+              onChange={e=>setEditingProduct({...editingProduct,specsText:e.target.value})}/></label>
           <label className="full">Или загрузите фотографию (PNG/JPEG/WebP, до 5 МБ; локально)<input disabled={pending} type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>void upload(e)}/></label>
-          {editingProduct.image&&<div className="admin-preview"><img src={editingProduct.image} alt="Предпросмотр товара"/></div>}
+          {editingProduct.image&&<div className="admin-preview"><img src={editingProduct.image} alt="Главная фотография товара"/></div>}
           <label className="admin-check full"><input type="checkbox" checked={editingProduct.active} onChange={e=>setEditingProduct({...editingProduct,active:e.target.checked})}/> Показывать товар в магазине</label>
         </div>
         <div className="admin-form-bottom"><button type="button" disabled={pending} onClick={()=>setEditingProduct(null)}>Отмена</button><button type="submit" className="admin-primary" disabled={pending}>{pending?"Сохраняем…":"Сохранить товар"}</button></div>

@@ -55,76 +55,138 @@ function ProductCard({ p, liked, quantity, onLike, onAdd, onOpen }: { p: Product
 }
 export default function Shop() {
   const [catalog, setCatalog] = useState<Product[]>(demoProducts);
+  const [pageProducts, setPageProducts] = useState<Product[]>([]);
+  const [savedProducts, setSavedProducts] = useState<Product[]>([]);
   const [storeCategories, setStoreCategories] = useState<StoreCategory[]>(demoCategories);
   const [catalogSource, setCatalogSource] = useState<"loading" | "demo" | "database" | "error">("loading");
   const [view, setView] = useState<View>("home");
   const [category, setCategory] = useState<Category | "all">("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("popular");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [appliedMin, setAppliedMin] = useState("");
+  const [appliedMax, setAppliedMax] = useState("");
+  const [inStock, setInStock] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [pageLoading, setPageLoading] = useState(false);
+  const [pageError, setPageError] = useState("");
   const [cart, setCart] = useState<Cart>({});
   const [favorites, setFavorites] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
-  const [selected, setSelected] = useState<Product | null>(null);
   useEffect(() => { setCart(restoreCart()); setFavorites(restoreFavorites()); setReady(true); }, []);
   useEffect(() => {
     let cancelled = false;
-    async function loadCatalog() {
+    async function loadHome() {
       try {
-        const [productsResponse, categoriesResponse] = await Promise.all([
-          fetch("/api/products?limit=100", { cache: "no-store" }),
-          fetch("/api/categories", { cache: "no-store" }),
+        const [a,b] = await Promise.all([
+          fetch("/api/products?limit=12", {cache:"no-store"}),
+          fetch("/api/categories", {cache:"no-store"})
         ]);
-        if (!productsResponse.ok || !categoriesResponse.ok) throw new Error("Server catalog is unavailable");
-        const productData = await productsResponse.json() as { items?: Product[]; source?: string };
-        const categoryData = await categoriesResponse.json() as { items?: StoreCategory[] };
-        if (!Array.isArray(productData.items) || !Array.isArray(categoryData.items)) throw new Error("Invalid catalog response");
-        if (!cancelled) {
-          setCatalog(productData.items);
-          setStoreCategories(categoryData.items);
-          setCatalogSource(productData.source === "database" ? "database" : "demo");
+        if(!a.ok || !b.ok)throw Error("Server catalog unavailable");
+        const products=await a.json() as {items:Product[];source:"demo"|"database"};
+        const categories=await b.json() as {items:StoreCategory[]};
+        if(!Array.isArray(products.items)||!Array.isArray(categories.items))throw Error("Invalid response");
+        if(!cancelled){
+          setCatalog(products.items);
+          setStoreCategories(categories.items);
+          setCatalogSource(products.source);
         }
-      } catch (err) {
-        console.error("Catalog request failed", err);
-        if (!cancelled) setCatalogSource("error");
+      }catch(err){
+        console.error("Catalog:",err);
+        if(!cancelled)setCatalogSource("error");
       }
     }
-    void loadCatalog();
-    return () => { cancelled = true; };
+    void loadHome();
+    return ()=>{cancelled=true};
   }, []);
+  useEffect(()=>{
+    if(view!=="catalog")return;
+    const controller=new AbortController();
+    const load=async()=>{
+      setPageLoading(true);setPageError("");
+      try{
+        const params=new URLSearchParams({limit:"12",page:String(page),sort});
+        if(category!=="all")params.set("category",category);
+        if(query.trim())params.set("q",query.trim());
+        if(appliedMin)params.set("minPrice",appliedMin);
+        if(appliedMax)params.set("maxPrice",appliedMax);
+        if(inStock)params.set("inStock","true");
+        const result=await fetch("/api/products?"+params.toString(),{cache:"no-store",signal:controller.signal});
+        const data=await result.json() as {items?:Product[];total?:number;totalPages?:number;error?:string;source?:"demo"|"database"};
+        if(!result.ok)throw Error(data.error || "Ошибка загрузки.");
+        if(!Array.isArray(data.items))throw Error("Некорректный ответ сервера.");
+        if(!controller.signal.aborted){
+          setPageProducts(data.items);
+          setTotalCount(data.total || 0);
+          setTotalPages(data.totalPages || 0);
+          if(data.source)setCatalogSource(data.source);
+        }
+      }catch(err){
+        if(!controller.signal.aborted)setPageError(err instanceof Error?err.message:"Ошибка каталога.");
+      }finally{if(!controller.signal.aborted)setPageLoading(false);}
+    };
+    // Do not send a request on every keystroke.
+    const timer=setTimeout(()=>{void load()},query?250:0);
+    return ()=>{clearTimeout(timer);controller.abort()};
+  },[view,category,query,sort,page,appliedMin,appliedMax,inStock]);
   useEffect(() => { if (ready) { try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch {} } }, [cart, ready]);
   useEffect(() => { if (ready) { try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites)); } catch {} } }, [favorites, ready]);
-  useEffect(() => {
-    if (!selected) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setSelected(null); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [selected]);
-  const go = (next: View) => { setView(next); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); };
-  const openCategory = (id: Category | "all") => { setCategory(id); go("catalog"); };
-  const add = (id: string) => {
-    const product = catalog.find((p) => p.id === id);
-    if (!product || product.stock === 0) return;
-    setCart((old) => {
-      const current = old[id] || 0;
-      const max = Math.min(product.stock ?? 99, 99);
-      return current >= max ? old : { ...old, [id]: current + 1 };
+  const savedIds=useMemo(()=>[...new Set([...Object.keys(cart),...favorites])].filter(validId).slice(0,100),[cart,favorites]);
+  const savedKey=savedIds.join(",");
+  useEffect(()=>{
+    if(!ready){return;}
+    if(!savedKey){setSavedProducts([]);return;}
+    const controller=new AbortController();
+    fetch("/api/products/lookup?ids="+encodeURIComponent(savedKey),{cache:"no-store",signal:controller.signal})
+      .then(async r=>{if(!r.ok)throw Error("Lookup unavailable");return r.json() as Promise<{items:Product[]}>})
+      .then(data=>{if(!controller.signal.aborted && Array.isArray(data.items))setSavedProducts(data.items)})
+      .catch(err=>{if(!controller.signal.aborted)console.error("Saved products:",err)});
+    return ()=>controller.abort();
+  },[ready,savedKey]);
+  const byId=useMemo(()=>{
+    const dict=new Map<string,Product>();
+    [...catalog,...pageProducts,...savedProducts].forEach(p=>dict.set(p.id,p));
+    return dict;
+  },[catalog,pageProducts,savedProducts]);
+  const go=(next:View)=>{setView(next);window.scrollTo({top:0,behavior:"smooth"})};
+  const openCategory=(id:Category|"all")=>{setCategory(id);setPage(1);go("catalog")};
+  const add=(id:string)=>{
+    const product=byId.get(id);if(!product || product.stock===0)return;
+    setCart(old=>{
+      const current=old[id]||0,max=Math.min(product.stock??99,99);
+      return current>=max?old:{...old,[id]:current+1};
     });
   };
-  const subtract = (id: string) => setCart((old) => { const next = { ...old }; if ((next[id] || 0) <= 1) delete next[id]; else next[id]--; return next; });
-  const toggleLike = (id: string) => setFavorites((old) => old.includes(id) ? old.filter((x) => x !== id) : [...old, id]);
-  const cartItems = catalog.filter((p) => (cart[p.id] || 0) > 0);
-  const cartCount = Object.values(cart).reduce((sum, n) => sum + n, 0);
-  const total = cartItems.reduce((sum, p) => sum + p.price * cart[p.id], 0);
-  const matches = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase("ru");
-    const list = catalog.filter((p) => (category === "all" || p.category === category) && (!q || (p.title + " " + p.subtitle).toLocaleLowerCase("ru").includes(q)));
-    if (sort === "cheap") return [...list].sort((a, b) => a.price - b.price);
-    if (sort === "expensive") return [...list].sort((a, b) => b.price - a.price);
-    if (sort === "rating") return [...list].sort((a, b) => b.rating - a.rating);
-    return list;
-  }, [catalog, category, query, sort]);
-  const renderProducts = (items: Product[]) => <div className="product-grid">{items.map((p) => <ProductCard key={p.id} p={p} liked={favorites.includes(p.id)} quantity={cart[p.id] || 0} onLike={() => toggleLike(p.id)} onAdd={() => add(p.id)} onOpen={() => setSelected(p)}/>)}</div>;
-  const searchSubmit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setCategory("all"); go("catalog"); };
+  const subtract=(id:string)=>setCart(old=>{
+    const next={...old};if((next[id]||0)<=1)delete next[id];else next[id]--;return next;
+  });
+  const toggleLike=(id:string)=>setFavorites(old=>old.includes(id)?old.filter(x=>x!==id):[...old,id]);
+  const cartItems=savedIds.flatMap(id=>{const p=byId.get(id);return p && (cart[id]||0)>0?[p]:[]});
+  const favoritesItems=favorites.flatMap(id=>{const p=byId.get(id);return p?[p]:[]});
+  const cartCount=Object.values(cart).reduce((sum,n)=>sum+n,0);
+  const total=cartItems.reduce((sum,p)=>sum+p.price*cart[p.id],0);
+  const resetFilters=()=>{
+    setQuery("");setCategory("all");setMinPrice("");setMaxPrice("");
+    setAppliedMin("");setAppliedMax("");setInStock(false);setPage(1);
+  };
+  const applyPrices=(e:FormEvent<HTMLFormElement>)=>{
+    e.preventDefault();
+    const valid=(value:string)=>!value||/^\\d{1,9}(\\.\\d{1,2})?$/.test(value);
+    if(!valid(minPrice)||!valid(maxPrice)||
+       (minPrice!=="" && maxPrice!=="" && Number(minPrice)>Number(maxPrice))){
+      setPageError("Проверьте диапазон цен: рубли и максимум две цифры после точки.");return;
+    }
+    setPageError("");setAppliedMin(minPrice);setAppliedMax(maxPrice);setPage(1);
+  };
+  const renderProducts=(items:Product[])=><div className="product-grid">
+    {items.map(p=><ProductCard key={p.id} p={p} liked={favorites.includes(p.id)}
+      quantity={cart[p.id]||0} onLike={()=>toggleLike(p.id)} onAdd={()=>add(p.id)}
+      onOpen={()=>window.location.assign("/product/"+encodeURIComponent(p.id))}/>)}
+  </div>;
+  const searchSubmit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setCategory("all"); setPage(1); go("catalog"); };
   return <>
     <div className="announcement"><span>Vira Shop · создаём удобные покупки</span><span>Демонстрационная версия — заказы пока не принимаются</span></div>
     <header className="site-header">
@@ -141,7 +203,7 @@ export default function Shop() {
     <main className="container main-content">
       <div className={"data-status status-" + catalogSource} role="status">
         {catalogSource === "loading" ? "Загружаем каталог…" :
-          catalogSource === "database" ? "Каталог подключён к PostgreSQL · товары пока демонстрационные" :
+          catalogSource === "database" ? "Каталог загружается из PostgreSQL" :
           catalogSource === "error" ? "Серверный каталог недоступен · временно показаны демонстрационные товары" :
           "Демонстрационный каталог · подключение к PostgreSQL пока не настроено"}
       </div>
@@ -159,13 +221,56 @@ export default function Shop() {
         <section className="wide-promo"><div><span>ПРОСТО ВЫБИРАТЬ</span><h2>Вещи, которые делают<br/>каждый день лучше</h2><button type="button" onClick={() => openCategory("home")}>Для дома и уюта <Icon name="arrow"/></button></div><div className="promo-art">✳ <span>📦</span> ✦</div></section>
         <section className="section"><div className="section-top"><div><span className="kicker">ЕЩЁ БОЛЬШЕ ИДЕЙ</span><h2>Вам может понравиться</h2></div></div>{renderProducts(catalog.slice(8))}</section>
       </>}
-      {view === "catalog" && <section className="inner-page"><div className="page-heading"><div><span className="kicker">ВЫБИРАЙТЕ С УДОВОЛЬСТВИЕМ</span><h1>Каталог товаров</h1><p>Поиск, категории и сортировка</p></div><span className="count-label">{matches.length} товаров</span></div>
-        <div className="catalog-tabs"><button className={category === "all" ? "selected" : ""} onClick={() => setCategory("all")}>Все товары</button>{storeCategories.map((c) => <button key={c.id} className={category === c.id ? "selected" : ""} onClick={() => setCategory(c.id)}>{c.emoji} {c.title}</button>)}</div>
-        <div className="catalog-toolbar"><span>Найдено: {matches.length}</span><label>Сортировать <select aria-label="Сортировка товаров" value={sort} onChange={(e) => setSort(e.target.value as Sort)}><option value="popular">По популярности</option><option value="cheap">Сначала дешёвые</option><option value="expensive">Сначала дорогие</option><option value="rating">По рейтингу</option></select></label></div>
-        {matches.length ? renderProducts(matches) : <div className="empty-panel"><span>🔎</span><h2>Ничего не найдено</h2><p>Измените запрос или выберите другую категорию.</p><button onClick={() => { setQuery(""); setCategory("all"); }}>Сбросить фильтры</button></div>}
+      {view === "catalog" && <section className="inner-page">
+        <div className="page-heading"><div><span className="kicker">ВЫБИРАЙТЕ С УДОВОЛЬСТВИЕМ</span>
+          <h1>Каталог товаров</h1><p>Результаты поиска и фильтры обрабатываются на сервере.</p></div>
+          <span className="count-label">{totalCount} товаров</span>
+        </div>
+        <div className="catalog-tabs">
+          <button className={category==="all"?"selected":""} onClick={()=>openCategory("all")}>Все товары</button>
+          {storeCategories.map(c=><button key={c.id} className={category===c.id?"selected":""}
+            onClick={()=>openCategory(c.id)}>{c.emoji} {c.title}</button>)}
+        </div>
+        <div className="catalog-layout">
+          <aside className="catalog-filters">
+            <h2>Фильтры</h2>
+            <form onSubmit={applyPrices}>
+              <label>Цена от, ₽<input type="number" min="0" step=".01" value={minPrice}
+                onChange={e=>setMinPrice(e.target.value)} placeholder="0"/></label>
+              <label>Цена до, ₽<input type="number" min="0" step=".01" value={maxPrice}
+                onChange={e=>setMaxPrice(e.target.value)} placeholder="Любая"/></label>
+              <button className="filter-apply" type="submit">Применить цену</button>
+            </form>
+            <label className="filter-checkbox"><input type="checkbox" checked={inStock}
+              onChange={e=>{setInStock(e.target.checked);setPage(1)}}/> Только в наличии</label>
+            <button type="button" className="filter-reset" onClick={resetFilters}>Сбросить фильтры</button>
+          </aside>
+          <div className="catalog-results">
+            <div className="catalog-toolbar"><span>Найдено: {totalCount}</span>
+              <label>Сортировать <select aria-label="Сортировка товаров" value={sort}
+                onChange={e=>{setSort(e.target.value as Sort);setPage(1)}}>
+                <option value="popular">По популярности</option>
+                <option value="cheap">Сначала дешёвые</option>
+                <option value="expensive">Сначала дорогие</option>
+                <option value="rating">По рейтингу</option>
+              </select></label>
+            </div>
+            {pageError && <p role="alert" className="catalog-error">{pageError}</p>}
+            {pageLoading?<div className="catalog-loading" role="status">Загружаем товары…</div>:
+            pageProducts.length?renderProducts(pageProducts):
+            !pageError?<div className="empty-panel"><span>🔎</span><h2>Ничего не найдено</h2>
+              <p>Попробуйте изменить поиск или диапазон цен.</p>
+              <button onClick={resetFilters}>Сбросить фильтры</button></div>:null}
+            {totalPages>1 && <nav className="catalog-pagination" aria-label="Страницы каталога">
+              <button disabled={page<=1||pageLoading} onClick={()=>{setPage(page-1);window.scrollTo({top:0,behavior:"smooth"})}}>← Назад</button>
+              <span>Страница {page} из {totalPages}</span>
+              <button disabled={page>=totalPages||pageLoading} onClick={()=>{setPage(page+1);window.scrollTo({top:0,behavior:"smooth"})}}>Вперёд →</button>
+            </nav>}
+          </div>
+        </div>
       </section>}
       {view === "favorites" && <section className="inner-page"><div className="page-heading"><div><span className="kicker">ВАША ПОДБОРКА</span><h1>Избранное</h1><p>Вещи, которые вам понравились</p></div><span className="count-label">{favorites.length} товаров</span></div>
-        {favorites.length ? renderProducts(catalog.filter((p) => favorites.includes(p.id))) : <div className="empty-panel"><span>♡</span><h2>Пока ничего нет</h2><p>Нажимайте сердечко на карточках товаров.</p><button onClick={() => openCategory("all")}>Перейти в каталог</button></div>}
+        {favoritesItems.length ? renderProducts(favoritesItems) : <div className="empty-panel"><span>♡</span><h2>Пока ничего нет</h2><p>Нажимайте сердечко на карточках товаров.</p><button onClick={() => openCategory("all")}>Перейти в каталог</button></div>}
       </section>}
       {view === "cart" && <section className="inner-page"><div className="page-heading"><div><span className="kicker">ВАШИ ПОКУПКИ</span><h1>Корзина</h1><p>Соберите товары в одном месте</p></div><span className="count-label">{cartCount} шт.</span></div>
         {cartItems.length ? <div className="cart-layout"><div className="cart-list">{cartItems.map((p) => <div className="cart-row" key={p.id}><img src={p.image} alt={p.title}/><div className="cart-description"><strong>{p.title}</strong><small>{p.subtitle}</small><button type="button" className="remove-link" onClick={() => setCart((old) => { const next = { ...old }; delete next[p.id]; return next; })}>Удалить</button></div><div className="cart-controls"><div><button onClick={() => subtract(p.id)} aria-label={"Уменьшить количество " + p.title}>−</button><span>{cart[p.id]}</span><button onClick={() => add(p.id)} aria-label={"Увеличить количество " + p.title}>+</button></div><strong>{rub(p.price * cart[p.id])}</strong></div></div>)}</div>
@@ -173,7 +278,7 @@ export default function Shop() {
           : <div className="empty-panel"><span>🛒</span><h2>Корзина пуста</h2><p>Добавьте товары из каталога, чтобы увидеть их здесь.</p><button onClick={() => openCategory("all")}>Перейти в каталог</button></div>}
       </section>}
     </main>
-    <footer className="site-footer"><div className="container footer-body"><div><div className="footer-logo">v.<span>vira shop</span></div><p>Удобный магазин начинается с мелочей. Мы только начинаем.</p></div><div><strong>Покупателям</strong><button onClick={() => openCategory("all")}>Каталог</button><button onClick={() => go("favorites")}>Избранное</button><button onClick={() => go("cart")}>Корзина</button></div><div><strong>О проекте</strong><p>Этап 1 · Прототип</p><p>Оплата и реальные заказы ещё не доступны.</p></div></div><div className="container footer-bottom"><span>© {new Date().getFullYear()} Vira Shop</span><span>Next.js · React · TypeScript</span></div></footer>
+    <footer className="site-footer"><div className="container footer-body"><div><div className="footer-logo">v.<span>vira shop</span></div><p>Удобный магазин начинается с мелочей. Мы только начинаем.</p></div><div><strong>Покупателям</strong><button onClick={() => openCategory("all")}>Каталог</button><button onClick={() => go("favorites")}>Избранное</button><button onClick={() => go("cart")}>Корзина</button></div><div><strong>О проекте</strong><p>Этап 4 · Развитие каталога</p><p>Оплата и реальные заказы ещё не доступны.</p></div></div><div className="container footer-bottom"><span>© {new Date().getFullYear()} Vira Shop</span><span>Next.js · React · TypeScript</span></div></footer>
     {selected && <div className="modal-backdrop" onClick={() => setSelected(null)}><div className="product-modal" role="dialog" aria-modal="true" aria-label={selected.title} onClick={(e) => e.stopPropagation()}><button type="button" className="modal-close" onClick={() => setSelected(null)} aria-label="Закрыть">×</button><img src={selected.image} alt={selected.title}/><div className="modal-info"><span className="kicker">КАРТОЧКА ТОВАРА</span><h2>{selected.title}</h2><p className="modal-subtitle">{selected.subtitle}</p><div className="rating">★ {selected.rating.toFixed(1)} · {selected.reviews} отзывов</div><p className="description">{selected.description}</p><div className="prices"><strong>{rub(selected.price)}</strong>{selected.oldPrice && <s>{rub(selected.oldPrice)}</s>}</div><button type="button" className="buy-button" onClick={() => add(selected.id)}>Добавить в корзину{cart[selected.id] ? " · " + cart[selected.id] : ""}</button><p className="modal-disclaimer">Демонстрационный товар, не предложение о продаже.</p></div></div></div>}
   </>;
 }
