@@ -30,3 +30,6 @@ out/
 
 # Local npm installation marker
 .vira-deps.hash
+
+# Development uploads
+public/uploads/

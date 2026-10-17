@@ -1,6 +1,5 @@
 name: Build check
 on: [push, pull_request]
-
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -22,8 +21,7 @@ jobs:
           POSTGRES_USER: vira_dev
           POSTGRES_PASSWORD: vira_dev_only_change_me
           POSTGRES_DB: vira_shop
-        ports:
-          - 5432:5432
+        ports: [5432:5432]
         options: >-
           --health-cmd "pg_isready -U vira_dev -d vira_shop"
           --health-interval 3s
@@ -31,6 +29,8 @@ jobs:
           --health-retries 20
     env:
       DATABASE_URL: postgresql://vira_dev:vira_dev_only_change_me@127.0.0.1:5432/vira_shop
+      VIRA_ADMIN_LOGIN: testadmin
+      VIRA_ADMIN_PASSWORD: test-only-strong-password-123
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,13 +39,13 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run db:seed
       - run: npm run db:seed
+      - run: npm run admin:create
       - run: npm run typecheck
       - run: npm run build
-      - name: Test API against PostgreSQL
+      - name: Check public API and admin permissions
         run: |
           npm run start -- --port 3000 > /tmp/vira-server.log 2>&1 &
-          node scripts/smoke-api.mjs || (cat /tmp/vira-server.log && exit 1)
-
+          node scripts/smoke-admin.mjs || (cat /tmp/vira-server.log && exit 1)
   windows-launcher:
     runs-on: windows-latest
     steps:

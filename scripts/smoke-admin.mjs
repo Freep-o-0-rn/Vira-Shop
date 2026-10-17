@@ -1,0 +1,62 @@
+import assert from "node:assert/strict";
+import { setTimeout as delay } from "node:timers/promises";
+const base = "http://127.0.0.1:3000";
+let ready=false;
+for(let i=0;i<50;i++){
+ try{const r=await fetch(base+"/api/products");if(r.ok){ready=true;break;}}catch{}
+ await delay(1000);
+}
+assert.ok(ready,"Next.js did not start");
+async function check(path, {status=200,method="GET",body,cookie,origin=base}={}){
+ const headers={};
+ if(method!=="GET")headers.Origin=origin;
+ if(cookie)headers.Cookie=cookie;
+ if(body!==undefined)headers["Content-Type"]="application/json";
+ const res=await fetch(base+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
+ const data=await res.json();
+ assert.equal(res.status,status,`${method} ${path} -> ${JSON.stringify(data)}`);
+ return {data,cookie:res.headers.get("set-cookie")};
+}
+const publicProducts=await check("/api/products?limit=100");
+assert.equal(publicProducts.data.source,"database");
+assert.equal(publicProducts.data.total,12);
+await check("/api/admin/products",{status:401});
+await check("/api/admin/categories",{status:401});
+await check("/api/admin/session",{status:200});
+await check("/api/admin/session",{status:403,method:"POST",origin:"https://attacker.example",body:{login:"testadmin",password:"wrong"}});
+await check("/api/admin/session",{status:401,method:"POST",body:{login:"testadmin",password:"wrong"}});
+const login=await check("/api/admin/session",{method:"POST",body:{login:"testadmin",password:"test-only-strong-password-123"}});
+assert.ok(login.cookie?.includes("vira_admin_session="));
+assert.ok(login.cookie?.includes("HttpOnly"));
+const cookie=login.cookie.split(";")[0];
+const auth={cookie};
+const cats=await check("/api/admin/categories",{...auth});
+assert.equal(cats.data.items.length,5);
+const products=await check("/api/admin/products",{...auth});
+assert.equal(products.data.items.length,12);
+const category={id:"test_c",title:"Проверочная категория",emoji:"🧪",tone:"green",active:true};
+await check("/api/admin/categories",{status:201,method:"POST",body:category,...auth});
+let active=await check("/api/categories");
+assert.ok(active.data.items.some(c=>c.id==="test_c"));
+const product={id:"test_sku",category:"test_c",title:"Проверочный товар",subtitle:"Тест",description:"Проверка API",image:"",badge:"Новинка",price:"1499.50",oldPrice:"1899.99",stock:7,active:true};
+await check("/api/admin/products",{status:201,method:"POST",body:product,...auth});
+let c=await check("/api/products?q=%D0%9F%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BE%D1%87%D0%BD%D1%8B%D0%B9");
+assert.equal(c.data.total,1);
+assert.equal(c.data.items[0].price,1499.5);
+assert.equal(c.data.items[0].stock,7);
+await check("/api/admin/products/test_sku",{method:"PUT",body:{...product,price:"1550.25",stock:2},...auth});
+c=await check("/api/products?category=test_c");
+assert.equal(c.data.items[0].price,1550.25);
+assert.equal(c.data.items[0].stock,2);
+await check("/api/admin/categories/test_c",{method:"DELETE",status:409,...auth});
+await check("/api/admin/products/test_sku",{method:"DELETE",...auth});
+c=await check("/api/products?category=test_c");
+assert.equal(c.data.total,0);
+await check("/api/admin/categories/test_c",{method:"PUT",body:{...category,active:false},...auth});
+const visible=await check("/api/categories");
+assert.equal(visible.data.items.some(c=>c.id==="test_c"),false);
+await check("/api/admin/products",{method:"POST",body:product,status:403,cookie,origin:"https://attacker.example"});
+await check("/api/admin/upload",{method:"POST",status:501,...auth});
+await check("/api/admin/session",{method:"DELETE",...auth});
+await check("/api/admin/products",{status:401,cookie});
+console.log("Admin + PostgreSQL integration tests passed.");

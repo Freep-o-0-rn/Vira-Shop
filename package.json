@@ -1,6 +1,6 @@
 {
   "name": "vira-shop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -8,7 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "db:setup": "node scripts/db-setup.mjs",
-    "db:seed": "node scripts/db-setup.mjs --seed"
+    "db:seed": "node scripts/db-setup.mjs --seed",
+    "admin:create": "node scripts/create-admin.mjs"
   },
   "dependencies": {
     "next": "^16.4.2",
