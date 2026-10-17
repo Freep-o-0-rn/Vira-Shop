@@ -1,6 +1,6 @@
 {
   "name": "vira-shop",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -15,15 +15,13 @@
     "next": "^16.4.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "pg": "^8.16.3",
-    "dotenv": "^16.6.1"
+    "@electric-sql/pglite": "^0.5.10"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "typescript": "^5.9.0",
-    "@types/pg": "^8.15.6"
+    "typescript": "^5.9.0"
   },
   "engines": {
     "node": ">=22.0.0"

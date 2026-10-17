@@ -33,3 +33,6 @@ out/
 
 # Development uploads
 public/uploads/
+
+# Embedded local database and user data: never publish or overwrite
+/data/

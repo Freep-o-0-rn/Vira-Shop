@@ -56,6 +56,14 @@ try {
         }
 
         Write-Host ""
+        Write-Host ""
+        Write-Host "Creating or upgrading local database..." -ForegroundColor Cyan
+        & npm.cmd run db:seed
+        if ($LASTEXITCODE -ne 0) {
+            throw "Local database migration failed. See the error above."
+        }
+        Write-Host "Database location: $projectRoot\data\pgdata" -ForegroundColor Green
+        Write-Host ""
         Write-Host "Starting Vira Shop: http://localhost:3000" -ForegroundColor Green
         Write-Host "Do not close this window while using the site."
         Write-Host "If port 3000 is busy, Next.js may display a different port."
