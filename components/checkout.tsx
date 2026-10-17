@@ -16,7 +16,7 @@ function guestItems():{id:string;quantity:number}[]{
   const parsed:unknown=JSON.parse(localStorage.getItem(KEY)||"{}");
   if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))return [];
   return Object.entries(parsed).filter(([id,q])=>/^[a-zA-Z0-9_-]{1,64}$/.test(id) &&
-    typeof q==="number" && Number.isInteger(q) && q>=1 && q<=99).slice(0,50)
+    typeof q==="number" && Number.isInteger(q) && q>=1 && q<=99)
    .map(([id,quantity])=>({id,quantity:quantity as number}));
  }catch{return [];}
 }
