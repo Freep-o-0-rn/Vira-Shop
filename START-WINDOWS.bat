@@ -1,24 +1,39 @@
 @echo off
+setlocal EnableExtensions
 chcp 65001 >nul
 cd /d "%~dp0"
-where node >nul 2>nul
-if errorlevel 1 (
-  echo Установите Node.js LTS: https://nodejs.org/
-  pause
-  exit /b 1
-)
-where npm >nul 2>nul
-if errorlevel 1 (
-  echo npm не найден. Переустановите Node.js.
-  pause
-  exit /b 1
-)
-if not exist "node_modules\next" (
-  call npm install --no-audit --no-fund
-  if errorlevel 1 (pause & exit /b 1)
-)
+if errorlevel 1 goto :bad_folder
+title Vira Shop - Local Development Server
 echo.
-echo Vira Shop: http://localhost:3000
-echo Закрыть сервер: Ctrl+C
-call npm run dev
-pause
+echo ====================================================
+echo           VIRA SHOP - LOCAL SERVER
+echo ====================================================
+echo.
+echo Working directory: %CD%
+echo The console will stay open after any error.
+echo.
+where powershell.exe >nul 2>nul
+if errorlevel 1 (
+    echo ERROR: Windows PowerShell is not available.
+    echo Run: npm install ^&^& npm run dev
+    goto :finished_error
+)
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\start-windows.ps1"
+if errorlevel 1 goto :finished_error
+echo.
+echo The Vira Shop server has stopped.
+goto :finished
+
+:bad_folder
+echo ERROR: Cannot open the project folder.
+goto :finished_error
+
+:finished_error
+echo.
+echo Startup failed. See vira-startup.log in this folder.
+echo You can also copy the error text from this window.
+:finished
+echo.
+echo Press any key to close this window...
+pause >nul
+endlocal
