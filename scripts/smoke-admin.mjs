@@ -92,7 +92,43 @@ await check("/api/admin/products/"+firstGenerated.data.id,{
 });
 const adminList=await check("/api/admin/products",{...auth});
 assert.ok(adminList.data.items.some(p=>p.id===firstGenerated.data.id));
-await check("/api/admin/upload",{method:"POST",status:501,...auth});
+// Local upload tests: authenticated multipart, magic bytes, size, CSRF and
+// consistent gallery order, without exposing filesystem paths to clients.
+const tinyPng=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/gv8AAAAASUVORK5CYII=","base64");
+async function uploadFile(bytes,{session=cookie,origin=base,type="image/png"}={}){
+  const form=new FormData();
+  form.set("image",new File([bytes],"test-image.png",{type}));
+  const response=await fetch(base+"/api/admin/upload",{
+    method:"POST",
+    headers:{...session?{Cookie:session}:{},Origin:origin},
+    body:form,signal:AbortSignal.timeout(10000)
+  });
+  const json=await response.json();
+  return {status:response.status,json};
+}
+assert.equal((await uploadFile(tinyPng,{session:""})).status,401);
+assert.equal((await uploadFile(tinyPng,{origin:"https://attacker.invalid"})).status,403);
+assert.equal((await uploadFile(Buffer.from("this-is-not-a-png"))).status,415);
+assert.equal((await uploadFile(Buffer.alloc(5*1024*1024+1))).status,413);
+const uploaded=await uploadFile(tinyPng);
+assert.equal(uploaded.status,201,JSON.stringify(uploaded.json));
+assert.match(uploaded.json.url,/^\/uploads\/[a-f0-9-]{36}\.png$/);
+const galleryProduct=await check("/api/admin/products",{
+  method:"POST",status:201,
+  body:{...generated,id:"",title:"Photo upload and gallery",image:uploaded.json.url,
+    images:[uploaded.json.url,product.image]},...auth
+});
+const galleryDetails=(await check("/api/products/"+galleryProduct.data.id)).data.item;
+assert.equal(galleryDetails.image,uploaded.json.url);
+assert.deepEqual(galleryDetails.images,[uploaded.json.url,product.image]);
+await check("/api/admin/products/"+galleryProduct.data.id,{
+  method:"PUT",body:{...generated,id:galleryProduct.data.id,image:product.image,
+    images:[product.image,uploaded.json.url]},...auth
+});
+const reordered=(await check("/api/products/"+galleryProduct.data.id)).data.item;
+assert.equal(reordered.image,product.image);
+assert.deepEqual(reordered.images,[product.image,uploaded.json.url]);
+
 await check("/api/admin/session",{method:"DELETE",...auth});
 await check("/api/admin/products",{status:401,cookie});
 console.log("Admin + PostgreSQL integration tests passed.");

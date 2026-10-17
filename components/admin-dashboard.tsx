@@ -1,7 +1,8 @@
 "use client";
-import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {EMOJI_CHOICES,suggestCategoryEmoji,suggestedSpecs,fillMissingSpecs,type Specification} from "@/lib/admin-form-helpers";
 import dynamic from "next/dynamic";
+import AdminImageManager from "@/components/admin-image-manager";
 
 const FullEmojiPicker=dynamic(()=>import("@/components/admin-emoji-picker"),{
   ssr:false,
@@ -18,9 +19,9 @@ type Product = {
   image: string; images: string[]; specs: {name:string;value:string}[]; badge: string | null; price: string; oldPrice: string | null; stock: number; active: boolean;
 };
 type FormProduct = { id: string; category: string; title: string; subtitle: string; description: string;
-  image: string; extraImages: string; specs: Specification[]; badge: string; price: string; oldPrice: string; stock: string; active: boolean };
+  image: string; images: string[]; specs: Specification[]; badge: string; price: string; oldPrice: string; stock: string; active: boolean };
 type FormCategory = { id: string; title: string; emoji: string; tone: string; active: boolean };
-const blankProduct = (): FormProduct => ({ id:"", category:"",title:"",subtitle:"",description:"",image:"",extraImages:"",specs:[],badge:"",price:"",oldPrice:"",stock:"0",active:true });
+const blankProduct = (): FormProduct => ({ id:"", category:"",title:"",subtitle:"",description:"",image:"",images:[],specs:[],badge:"",price:"",oldPrice:"",stock:"0",active:true });
 const blankCategory = (): FormCategory => ({ id:"",title:"",emoji:"📦",tone:"blue",active:true });
 const price = (s: string | null) => s === null ? "—" : new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB",maximumFractionDigits:2}).format(Number(s));
 async function api<T = unknown>(url: string, init?: RequestInit): Promise<T> {
@@ -37,6 +38,7 @@ export default function AdminDashboard({login}:{login:string}) {
   const [orders,setOrders]=useState<AdminOrder[]>([]);
   const [categories,setCategories]=useState<Category[]>([]);
   const [pending,setPending]=useState(false);
+  const [imageUploading,setImageUploading]=useState(false);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
   const [success,setSuccess]=useState("");
@@ -65,24 +67,26 @@ export default function AdminDashboard({login}:{login:string}) {
     return ()=>{active=false};
   },[refresh]);
   const notice=(message:string)=>{setError("");setSuccess(message);};
-  const startAddProduct=()=>{setEditingProduct({...blankProduct(),category:categories.find(c=>c.active)?.id || categories[0]?.id || ""});setExistingProduct(false);setError("");setSuccess("");};
-  const editProduct=(p:Product)=>{setEditingProduct({...p,extraImages:(p.images||[]).filter(x=>x!==p.image).join("\n"),specs:p.specs??[],oldPrice:p.oldPrice??"",badge:p.badge??"",stock:String(p.stock)});setExistingProduct(true);setError("");setSuccess("");};
+  const startAddProduct=()=>{setEditingProduct({...blankProduct(),category:categories.find(c=>c.active)?.id || categories[0]?.id || ""});setExistingProduct(false);setImageUploading(false);setError("");setSuccess("");};
+  const editProduct=(p:Product)=>{setEditingProduct({...p,
+    images:[...new Set([p.image,...(p.images||[])].filter(Boolean))].slice(0,8),
+    specs:p.specs??[],oldPrice:p.oldPrice??"",badge:p.badge??"",stock:String(p.stock)});
+    setExistingProduct(true);setImageUploading(false);setError("");setSuccess("");};
   const startAddCategory=()=>{setEditingCategory(blankCategory());setExistingCategory(false);setEmojiAuto(true);setEmojiPickerOpen(false);setError("");setSuccess("");};
   const editCategory=(c:Category)=>{setEditingCategory({...c});setExistingCategory(true);setEmojiAuto(c.emoji===suggestCategoryEmoji(c.title));setEmojiPickerOpen(false);setError("");setSuccess("");};
   async function saveProduct(event:FormEvent<HTMLFormElement>){
-    event.preventDefault();if(!editingProduct)return;
+    event.preventDefault();if(!editingProduct||imageUploading)return;
     setPending(true);setError("");setSuccess("");
     try{
-      const extra=editingProduct.extraImages.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
       const specs=editingProduct.specs.map(item=>({name:item.name.trim(),value:item.value.trim()}))
         .filter(item=>item.name||item.value);
       if(specs.some(item=>!item.name||!item.value))throw Error("Заполните название и значение каждой характеристики.");
       if(specs.length>20)throw Error("Не более 20 характеристик.");
       if(new Set(specs.map(item=>item.name.toLocaleLowerCase("ru"))).size!==specs.length)
         throw Error("Названия характеристик не должны повторяться.");
-      const images=[...new Set([editingProduct.image.trim(),...extra].filter(Boolean))];
+      const images=[...new Set(editingProduct.images.map(x=>x.trim()).filter(Boolean))];
       if(images.length>8)throw Error("Можно добавить не более 8 фотографий.");
-      const payload={...editingProduct,images,specs,stock:Number(editingProduct.stock)};
+      const payload={...editingProduct,image:images[0]||"",images,specs,stock:Number(editingProduct.stock)};
       const saved=await api<{id:string}>(existingProduct ? "/api/admin/products/"+encodeURIComponent(editingProduct.id):"/api/admin/products",{
         method:existingProduct?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)
       });
@@ -120,23 +124,6 @@ export default function AdminDashboard({login}:{login:string}) {
     setPending(true);setError("");setSuccess("");
     try{await api("/api/admin/categories/"+encodeURIComponent(c.id),{method:"DELETE"});await refresh();notice("Категория удалена.");}
     catch(e){setError(e instanceof Error?e.message:"Ошибка удаления.");}finally{setPending(false);}
-  }
-  async function upload(event:ChangeEvent<HTMLInputElement>){
-    const file=event.target.files?.[0];if(!file)return;
-    if(file.size>5*1024*1024){setError("Файл должен быть не больше 5 МБ.");return;}
-    setPending(true);setError("");
-    try{
-      const body=new FormData();body.set("image",file);
-      const result=await api<{url:string}>("/api/admin/upload",{method:"POST",body});
-      setEditingProduct(old=>{
-        if(!old)return old;
-        if(!old.image)return {...old,image:result.url};
-        const existing=old.extraImages.split(/\r?\n/).filter(Boolean);
-        return {...old,extraImages:[...existing,result.url].join("\n")};
-      });
-      setSuccess("Фотография загружена. Нажмите «Сохранить товар», чтобы привязать её.");
-    }catch(e){setError(e instanceof Error?e.message:"Ошибка загрузки.");}
-    finally{setPending(false);event.target.value="";}
   }
   async function changeOrderStatus(order:AdminOrder,status:string){
     if(status==="cancelled"&&!confirm("Отменить заказ № "+order.id+" и вернуть товары на склад?"))return;
@@ -218,8 +205,8 @@ export default function AdminDashboard({login}:{login:string}) {
         </div>}
       </>}
     </section>
-    {editingProduct&&<div className="admin-modal-overlay" onClick={()=>{if(!pending)setEditingProduct(null)}}><div className="admin-modal" role="dialog" aria-modal="true" aria-label="Редактор товара" onClick={e=>e.stopPropagation()}>
-      <div className="admin-modal-heading"><div><span className="admin-eyebrow">КАТАЛОГ</span><h2>{existingProduct?"Редактировать товар":"Новый товар"}</h2></div><button disabled={pending} aria-label="Закрыть" onClick={()=>setEditingProduct(null)}>×</button></div>
+    {editingProduct&&<div className="admin-modal-overlay" onClick={()=>{if(!pending&&!imageUploading)setEditingProduct(null)}}><div className="admin-modal" role="dialog" aria-modal="true" aria-label="Редактор товара" onClick={e=>e.stopPropagation()}>
+      <div className="admin-modal-heading"><div><span className="admin-eyebrow">КАТАЛОГ</span><h2>{existingProduct?"Редактировать товар":"Новый товар"}</h2></div><button disabled={pending||imageUploading} aria-label="Закрыть" onClick={()=>setEditingProduct(null)}>×</button></div>
       <form onSubmit={e=>void saveProduct(e)}>
         <div className="admin-form-grid">
           <label>Артикул товара
@@ -235,10 +222,10 @@ export default function AdminDashboard({login}:{login:string}) {
           <label>Остаток, шт.<input type="number" required min="0" max="100000000" step="1" value={editingProduct.stock} onChange={e=>setEditingProduct({...editingProduct,stock:e.target.value})}/></label>
           <label>Плашка (необязательно)<input maxLength={50} value={editingProduct.badge} placeholder="Новинка" onChange={e=>setEditingProduct({...editingProduct,badge:e.target.value})}/></label>
           <label className="full">Описание<textarea rows={3} value={editingProduct.description} maxLength={10000} onChange={e=>setEditingProduct({...editingProduct,description:e.target.value})}/></label>
-          <label className="full">URL изображения (HTTPS или /uploads/)<input value={editingProduct.image} placeholder="https://..." onChange={e=>setEditingProduct({...editingProduct,image:e.target.value})}/></label>
-          <label className="full">Дополнительные фотографии (HTTPS-ссылки, по одной на строку; всего не более 8)
-            <textarea rows={3} value={editingProduct.extraImages} placeholder={"https://.../photo-2.jpg\nhttps://.../photo-3.jpg"}
-              onChange={e=>setEditingProduct({...editingProduct,extraImages:e.target.value})}/></label>
+          <AdminImageManager images={editingProduct.images}
+            disabled={pending} onBusyChange={setImageUploading}
+            onChange={images=>setEditingProduct(current=>current?{...current,
+              image:images[0]||"",images}:current)}/>
           <div className="admin-spec-editor full">
             <div className="admin-spec-top"><div><strong>Характеристики товара</strong>
               <small>Используются для фильтрации товаров в каталоге.</small></div>
@@ -262,11 +249,9 @@ export default function AdminDashboard({login}:{login:string}) {
               + Добавить характеристику ({editingProduct.specs.length}/20)
             </button>
           </div>
-          <label className="full">Или загрузите фотографию (PNG/JPEG/WebP, до 5 МБ; локально)<input disabled={pending} type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>void upload(e)}/></label>
-          {editingProduct.image&&<div className="admin-preview"><img src={editingProduct.image} alt="Главная фотография товара"/></div>}
           <label className="admin-check full"><input type="checkbox" checked={editingProduct.active} onChange={e=>setEditingProduct({...editingProduct,active:e.target.checked})}/> Показывать товар в магазине</label>
         </div>
-        <div className="admin-form-bottom"><button type="button" disabled={pending} onClick={()=>setEditingProduct(null)}>Отмена</button><button type="submit" className="admin-primary" disabled={pending}>{pending?"Сохраняем…":"Сохранить товар"}</button></div>
+        <div className="admin-form-bottom"><button type="button" disabled={pending||imageUploading} onClick={()=>setEditingProduct(null)}>Отмена</button><button type="submit" className="admin-primary" disabled={pending||imageUploading}>{imageUploading?"Загружаем фото…":pending?"Сохраняем…":"Сохранить товар"}</button></div>
       </form>
     </div></div>}
     {editingCategory&&<div className="admin-modal-overlay" onClick={()=>{if(!pending)setEditingCategory(null)}}><div className="admin-modal admin-modal-small" role="dialog" aria-modal="true" aria-label="Редактор категории" onClick={e=>e.stopPropagation()}>

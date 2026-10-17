@@ -21,6 +21,7 @@ jobs:
       VIRA_ADMIN_LOGIN: testadmin
       VIRA_ADMIN_PASSWORD: test-only-strong-password-123
       APP_ORIGIN: http://127.0.0.1:3000
+      VIRA_LOCAL_UPLOADS: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

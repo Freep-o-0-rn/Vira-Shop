@@ -11,8 +11,10 @@ export async function POST(request: NextRequest) {
   try {
     const denied = await adminGuard(request, true);
     if (denied) return denied;
-    // Local disk uploads are not durable across container deployments.
-    if (process.env.NODE_ENV === "production") {
+    // Disabled by default in production: ephemeral cloud/container disks are
+    // unsuitable for durable uploads. Only enable for a managed local/VPS
+    // installation where public/uploads is persistent and backed up.
+    if (process.env.NODE_ENV === "production" && process.env.VIRA_LOCAL_UPLOADS !== "1") {
       return NextResponse.json({ error: "Загрузка изображений в production отключена до подключения объектного хранилища." }, { status: 501 });
     }
     const length = Number(request.headers.get("content-length") || 0);
@@ -27,6 +29,19 @@ export async function POST(request: NextRequest) {
     const webp = content.toString("ascii",0,4) === "RIFF" && content.toString("ascii",8,12) === "WEBP";
     const ext = png ? "png" : jpeg ? "jpg" : webp ? "webp" : null;
     if (!ext) return NextResponse.json({ error: "Разрешены только PNG, JPEG и WebP." }, { status: 415 });
+    // Reject obvious masquerading/truncated inputs before saving.
+    const pngValid = png && content.length >= 45 &&
+      content.toString("ascii",12,16)==="IHDR" &&
+      content.readUInt32BE(16)>0 && content.readUInt32BE(16)<=16000 &&
+      content.readUInt32BE(20)>0 && content.readUInt32BE(20)<=16000 &&
+      content.toString("ascii",content.length-8,content.length-4)==="IEND";
+    const jpgValid = jpeg && content.length >= 32 &&
+      content[content.length-2]===255 && content[content.length-1]===217;
+    const webpValid = webp && content.length>=20 &&
+      content.readUInt32LE(4)+8===content.length &&
+      ["VP8 ","VP8L","VP8X"].includes(content.toString("ascii",12,16));
+    if(!(pngValid||jpgValid||webpValid))
+      return NextResponse.json({error:"Повреждённый или неподдерживаемый файл изображения."},{status:415});
     const dir = join(process.cwd(), "public", "uploads");
     await mkdir(dir, { recursive: true });
     const name = `${randomUUID()}.${ext}`;
