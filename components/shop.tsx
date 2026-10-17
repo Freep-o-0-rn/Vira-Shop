@@ -174,7 +174,7 @@ export default function Shop() {
   };
   const applyPrices=(e:FormEvent<HTMLFormElement>)=>{
     e.preventDefault();
-    const valid=(value:string)=>!value||/^\\d{1,9}(\\.\\d{1,2})?$/.test(value);
+    const valid=(value:string)=>!value||/^\d{1,9}(\.\d{1,2})?$/.test(value);
     if(!valid(minPrice)||!valid(maxPrice)||
        (minPrice!=="" && maxPrice!=="" && Number(minPrice)>Number(maxPrice))){
       setPageError("Проверьте диапазон цен: рубли и максимум две цифры после точки.");return;

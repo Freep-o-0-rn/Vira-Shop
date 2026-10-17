@@ -58,8 +58,8 @@ export default function AdminDashboard({login}:{login:string}) {
     event.preventDefault();if(!editingProduct)return;
     setPending(true);setError("");setSuccess("");
     try{
-      const extra=editingProduct.extraImages.split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean);
-      const specs=editingProduct.specsText.split(/\\r?\\n/).map(line=>line.trim()).filter(Boolean).map(line=>{
+      const extra=editingProduct.extraImages.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+      const specs=editingProduct.specsText.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map(line=>{
         const separator=line.indexOf(":");
         if(separator<=0||!line.slice(separator+1).trim())throw Error("Каждую характеристику укажите как «Название: Значение».");
         return {name:line.slice(0,separator).trim(),value:line.slice(separator+1).trim()};
@@ -106,8 +106,8 @@ export default function AdminDashboard({login}:{login:string}) {
       setEditingProduct(old=>{
         if(!old)return old;
         if(!old.image)return {...old,image:result.url};
-        const existing=old.extraImages.split(/\\r?\\n/).filter(Boolean);
-        return {...old,extraImages:[...existing,result.url].join("\\n")};
+        const existing=old.extraImages.split(/\r?\n/).filter(Boolean);
+        return {...old,extraImages:[...existing,result.url].join("\n")};
       });
       setSuccess("Фотография загружена. Нажмите «Сохранить товар», чтобы привязать её.");
     }catch(e){setError(e instanceof Error?e.message:"Ошибка загрузки.");}
@@ -165,10 +165,10 @@ export default function AdminDashboard({login}:{login:string}) {
           <label className="full">Описание<textarea rows={3} value={editingProduct.description} maxLength={10000} onChange={e=>setEditingProduct({...editingProduct,description:e.target.value})}/></label>
           <label className="full">URL изображения (HTTPS или /uploads/)<input value={editingProduct.image} placeholder="https://..." onChange={e=>setEditingProduct({...editingProduct,image:e.target.value})}/></label>
           <label className="full">Дополнительные фотографии (HTTPS-ссылки, по одной на строку; всего не более 8)
-            <textarea rows={3} value={editingProduct.extraImages} placeholder={"https://.../photo-2.jpg\\nhttps://.../photo-3.jpg"}
+            <textarea rows={3} value={editingProduct.extraImages} placeholder={"https://.../photo-2.jpg\nhttps://.../photo-3.jpg"}
               onChange={e=>setEditingProduct({...editingProduct,extraImages:e.target.value})}/></label>
           <label className="full">Характеристики (каждая с новой строки: Название: Значение)
-            <textarea rows={4} value={editingProduct.specsText} placeholder={"Цвет: Чёрный\\nМатериал: Пластик"}
+            <textarea rows={4} value={editingProduct.specsText} placeholder={"Цвет: Чёрный\nМатериал: Пластик"}
               onChange={e=>setEditingProduct({...editingProduct,specsText:e.target.value})}/></label>
           <label className="full">Или загрузите фотографию (PNG/JPEG/WebP, до 5 МБ; локально)<input disabled={pending} type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>void upload(e)}/></label>
           {editingProduct.image&&<div className="admin-preview"><img src={editingProduct.image} alt="Главная фотография товара"/></div>}
