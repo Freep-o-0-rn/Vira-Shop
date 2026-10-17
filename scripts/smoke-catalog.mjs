@@ -49,4 +49,16 @@ await api("/api/products/lookup?ids=invalid%3Bid",{status:400});
 await api("/api/products/no_such_id",{status:404});
 const webpage=await fetch(base+"/product/bulk_11",{signal:AbortSignal.timeout(12000)});
 assert.equal(webpage.status,200);assert.ok((await webpage.text()).includes("Тестовый товар 11"));
+// Each storefront view must have a direct, reloadable URL.
+for(const [path,title] of [
+  ["/catalog?category=integration_bulk&page=2&sort=cheap","Каталог товаров"],
+  ["/favorites","Избранное"],
+  ["/cart","Корзина"],
+]){
+ const response=await fetch(base+path,{signal:AbortSignal.timeout(15000)});
+ assert.equal(response.status,200,path);
+ const html=await response.text();
+ assert.ok(html.includes(title),`Expected ${title} at ${path}`);
+}
+assert.ok((await fetch(base+"/product/bulk_11")).ok);
 console.log("Embedded DB catalog API + 125 rows + product pages passed.");

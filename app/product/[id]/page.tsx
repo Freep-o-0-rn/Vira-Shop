@@ -26,7 +26,7 @@ export default async function ProductPage({params}:Params) {
     return <main className="container product-unavailable">
       <h1>Каталог временно недоступен</h1>
       <p>Проверьте подключение к базе данных и повторите попытку.</p>
-      <Link href="/">Вернуться в магазин</Link>
+      <Link href="/catalog">Вернуться в каталог</Link>
     </main>;
   }
   if(!product)notFound();
@@ -39,7 +39,7 @@ export default async function ProductPage({params}:Params) {
   const similar=(similarData?.items ?? []).filter(p=>p.id!==id).slice(0,4);
   return <main className="container product-page">
     <nav className="product-breadcrumb">
-      <Link href="/">Главная</Link><span>›</span><Link href="/">{category?.title || "Каталог"}</Link>
+      <Link href="/">Главная</Link><span>›</span><Link href={"/catalog?category="+encodeURIComponent(product.category)}>{category?.title || "Каталог"}</Link>
       <span>›</span><span>{product.title}</span>
     </nav>
     <h1>{product.title}</h1>
@@ -64,6 +64,6 @@ export default async function ProductPage({params}:Params) {
         </Link>
       )}</div>
     </section>}
-    <p className="product-page-note">Демонстрационная версия Vira Shop. Оформление заказов и оплата отключены.</p>
+    <p className="product-page-note">Демонстрационная версия Vira Shop. Тестовые заявки доступны; онлайн-оплата отключена.</p>
   </main>;
 }

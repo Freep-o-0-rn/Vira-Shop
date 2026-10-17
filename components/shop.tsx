@@ -1,9 +1,10 @@
 "use client";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { catalogHref, defaultCatalogRoute, parseCatalogRoute, pathToView, type CatalogOrder, type CatalogRoute, type StorefrontView } from "@/lib/catalog-route";
 import { categories as demoCategories, products as demoProducts, rub, type Category, type Product, type StoreCategory } from "@/lib/catalog";
 
-type View = "home" | "catalog" | "favorites" | "cart";
-type Sort = "popular" | "cheap" | "expensive" | "rating";
+type View = StorefrontView;
+type Sort = CatalogOrder;
 type Cart = Record<string, number>;
 const CART_KEY = "vira-shop:cart:v1";
 const FAVORITES_KEY = "vira-shop:favorites:v1";
@@ -37,31 +38,35 @@ function Icon({ name }: { name: "heart" | "bag" | "search" | "grid" | "arrow" | 
   };
   return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d[name]}/></svg>;
 }
-function ProductCard({ p, liked, quantity, onLike, onAdd, onOpen }: { p: Product; liked: boolean; quantity: number; onLike: () => void; onAdd: () => void; onOpen: () => void }) {
+function ProductCard({ p, liked, quantity, onLike, onAdd }: { p: Product; liked: boolean; quantity: number; onLike: () => void; onAdd: () => void }) {
   return <article className="product-card">
-    <div className="product-visual" onClick={onOpen} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}>
-      <img src={p.image} alt={p.title} loading="lazy"/>
-      {p.badge && <span className="product-badge">{p.badge}</span>}
-      <button type="button" className={"like-button " + (liked ? "liked" : "")} aria-label={liked ? "Удалить из избранного" : "В избранное"} aria-pressed={liked} onClick={(e) => { e.stopPropagation(); onLike(); }}><Icon name="heart"/></button>
+    <div className="product-visual">
+      <a className="product-image-link" href={"/product/"+encodeURIComponent(p.id)} aria-label={"Открыть товар: "+p.title}>
+        {p.image?<img src={p.image} alt={p.title} loading="lazy"/>:<span className="product-image-placeholder">📦</span>}
+        {p.badge && <span className="product-badge">{p.badge}</span>}
+      </a>
+      <button type="button" className={"like-button " + (liked ? "liked" : "")} aria-label={liked ? "Удалить из избранного" : "В избранное"} aria-pressed={liked} onClick={onLike}><Icon name="heart"/></button>
     </div>
     <div className="product-body">
       <div className="prices"><strong>{rub(p.price)}</strong>{p.oldPrice && <s>{rub(p.oldPrice)}</s>}</div>
-      <button type="button" className="product-name" onClick={onOpen}>{p.title}</button>
+      <a className="product-name" href={"/product/"+encodeURIComponent(p.id)}>{p.title}</a>
       <p>{p.subtitle}</p>
       <div className="rating"><span>★ {p.rating.toFixed(1)}</span> <span className="muted">· {p.reviews} отзывов</span></div>
       <button type="button" className={"buy-button " + (quantity ? "in-cart" : "")} disabled={p.stock === 0 || (p.stock !== undefined && quantity >= p.stock)} onClick={onAdd}>{p.stock === 0 ? "Нет в наличии" : (p.stock !== undefined && quantity >= p.stock) ? "Доступное количество в корзине" : quantity ? "Добавить ещё · " + quantity : "В корзину"}</button>
     </div>
   </article>;
 }
-export default function Shop() {
+export default function Shop({initialView="home"}:{initialView?:View}) {
   const [catalog, setCatalog] = useState<Product[]>(demoProducts);
   const [pageProducts, setPageProducts] = useState<Product[]>([]);
   const [savedProducts, setSavedProducts] = useState<Product[]>([]);
   const [storeCategories, setStoreCategories] = useState<StoreCategory[]>(demoCategories);
   const [catalogSource, setCatalogSource] = useState<"loading" | "demo" | "database" | "error">("loading");
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>(initialView);
   const [category, setCategory] = useState<Category | "all">("all");
   const [query, setQuery] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
+  const [urlReady,setUrlReady] = useState(false);
   const [sort, setSort] = useState<Sort>("popular");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
@@ -76,6 +81,27 @@ export default function Shop() {
   const [cart, setCart] = useState<Cart>({});
   const [favorites, setFavorites] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
+  const restoreLocation=useCallback(()=>{
+    const current=pathToView(window.location.pathname);
+    const params=parseCatalogRoute(window.location.search);
+    setView(current);
+    setCategory(params.category||"all");
+    setQuery(params.q);
+    setSearchDraft(params.q);
+    setSort(params.sort);
+    setPage(params.page);
+    setMinPrice(params.minPrice);
+    setMaxPrice(params.maxPrice);
+    setAppliedMin(params.minPrice);
+    setAppliedMax(params.maxPrice);
+    setInStock(params.inStock);
+    setUrlReady(true);
+  },[]);
+  useEffect(()=>{
+    restoreLocation();
+    window.addEventListener("popstate",restoreLocation);
+    return ()=>window.removeEventListener("popstate",restoreLocation);
+  },[restoreLocation]);
   useEffect(() => { setCart(restoreCart()); setFavorites(restoreFavorites()); setReady(true); }, []);
   useEffect(() => {
     let cancelled = false;
@@ -103,7 +129,7 @@ export default function Shop() {
     return ()=>{cancelled=true};
   }, []);
   useEffect(()=>{
-    if(view!=="catalog")return;
+    if(!urlReady||view!=="catalog")return;
     const controller=new AbortController();
     const load=async()=>{
       setPageLoading(true);setPageError("");
@@ -131,7 +157,7 @@ export default function Shop() {
     // Do not send a request on every keystroke.
     const timer=setTimeout(()=>{void load()},query?250:0);
     return ()=>{clearTimeout(timer);controller.abort()};
-  },[view,category,query,sort,page,appliedMin,appliedMax,inStock]);
+  },[urlReady,view,category,query,sort,page,appliedMin,appliedMax,inStock]);
   useEffect(() => { if (ready) { try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch {} } }, [cart, ready]);
   useEffect(() => { if (ready) { try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites)); } catch {} } }, [favorites, ready]);
   const savedIds=useMemo(()=>[...new Set([...Object.keys(cart),...favorites])].filter(validId).slice(0,100),[cart,favorites]);
@@ -151,8 +177,26 @@ export default function Shop() {
     [...catalog,...pageProducts,...savedProducts].forEach(p=>dict.set(p.id,p));
     return dict;
   },[catalog,pageProducts,savedProducts]);
-  const go=(next:View)=>{setView(next);window.scrollTo({top:0,behavior:"smooth"})};
-  const openCategory=(id:Category|"all")=>{setCategory(id);setPage(1);go("catalog")};
+  // All catalog filters are represented in shareable, back/forward-safe URLs.
+  const route:CatalogRoute={
+    q:query,category:category==="all"?"":category,sort,page,
+    minPrice:appliedMin,maxPrice:appliedMax,inStock
+  };
+  const navigate=(href:string)=>{
+    if(window.location.pathname+window.location.search!==href)window.history.pushState({},"",href);
+    restoreLocation();
+    window.scrollTo({top:0,behavior:"smooth"});
+  };
+  const go=(next:View)=>{
+    const path={home:"/",catalog:"/catalog",favorites:"/favorites",cart:"/cart"}[next];
+    navigate(path);
+  };
+  const catalogNavigate=(changes:Partial<CatalogRoute>,reset=false)=>{
+    navigate(catalogHref({...(reset?defaultCatalogRoute:route),...changes}));
+  };
+  const openCategory=(id:Category|"all")=>{
+    catalogNavigate({category:id==="all"?"":id,page:1},view!=="catalog");
+  };
   const add=(id:string)=>{
     const product=byId.get(id);if(!product || product.stock===0)return;
     setCart(old=>{
@@ -168,10 +212,7 @@ export default function Shop() {
   const favoritesItems=favorites.flatMap(id=>{const p=byId.get(id);return p?[p]:[]});
   const cartCount=Object.values(cart).reduce((sum,n)=>sum+n,0);
   const total=cartItems.reduce((sum,p)=>sum+p.price*cart[p.id],0);
-  const resetFilters=()=>{
-    setQuery("");setCategory("all");setMinPrice("");setMaxPrice("");
-    setAppliedMin("");setAppliedMax("");setInStock(false);setPage(1);
-  };
+  const resetFilters=()=>catalogNavigate({},true);
   const applyPrices=(e:FormEvent<HTMLFormElement>)=>{
     e.preventDefault();
     const valid=(value:string)=>!value||/^\d{1,9}(\.\d{1,2})?$/.test(value);
@@ -179,21 +220,20 @@ export default function Shop() {
        (minPrice!=="" && maxPrice!=="" && Number(minPrice)>Number(maxPrice))){
       setPageError("Проверьте диапазон цен: рубли и максимум две цифры после точки.");return;
     }
-    setPageError("");setAppliedMin(minPrice);setAppliedMax(maxPrice);setPage(1);
+    setPageError("");catalogNavigate({minPrice,maxPrice,page:1});
   };
   const renderProducts=(items:Product[])=><div className="product-grid">
     {items.map(p=><ProductCard key={p.id} p={p} liked={favorites.includes(p.id)}
-      quantity={cart[p.id]||0} onLike={()=>toggleLike(p.id)} onAdd={()=>add(p.id)}
-      onOpen={()=>window.location.assign("/product/"+encodeURIComponent(p.id))}/>)}
+      quantity={cart[p.id]||0} onLike={()=>toggleLike(p.id)} onAdd={()=>add(p.id)}/>)}
   </div>;
-  const searchSubmit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setCategory("all"); setPage(1); go("catalog"); };
+  const searchSubmit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); catalogNavigate({q:searchDraft.trim(),category:"",page:1},view!=="catalog"); };
   return <>
-    <div className="announcement"><span>Vira Shop · создаём удобные покупки</span><span>Демонстрационная версия — заказы пока не принимаются</span></div>
+    <div className="announcement"><span>Vira Shop · создаём удобные покупки</span><span>Демонстрационная версия · онлайн-оплата пока недоступна</span></div>
     <header className="site-header">
       <div className="container header-inner">
         <button type="button" className="brand" onClick={() => go("home")} aria-label="Vira Shop — главная"><span className="brand-mark">v.</span><span className="brand-name">vira<span>shop</span></span></button>
         <button type="button" className="catalog-trigger" onClick={() => openCategory("all")}><Icon name="grid"/> <span>Каталог</span></button>
-        <form className="search-form" onSubmit={searchSubmit}><input type="search" aria-label="Поиск товаров" placeholder="Искать товары и категории" value={query} onChange={(event) => {setQuery(event.target.value);setPage(1);}}/><button type="submit" aria-label="Найти"><Icon name="search"/> <span>Найти</span></button></form>
+        <form className="search-form" onSubmit={searchSubmit}><input type="search" aria-label="Поиск товаров" placeholder="Искать товары и категории" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} maxLength={100}/><button type="submit" aria-label="Найти"><Icon name="search"/> <span>Найти</span></button></form>
         <nav className="header-nav" aria-label="Разделы магазина">
           <button type="button" onClick={() => window.location.assign("/account")}><Icon name="user"/><span>Кабинет</span></button>
           <button type="button" onClick={() => go("favorites")} className={view === "favorites" ? "active" : ""}><Icon name="heart"/><span>Избранное</span>{favorites.length > 0 && <small>{favorites.length}</small>}</button>
@@ -243,13 +283,13 @@ export default function Shop() {
               <button className="filter-apply" type="submit">Применить цену</button>
             </form>
             <label className="filter-checkbox"><input type="checkbox" checked={inStock}
-              onChange={e=>{setInStock(e.target.checked);setPage(1)}}/> Только в наличии</label>
+              onChange={e=>catalogNavigate({inStock:e.target.checked,page:1})}/> Только в наличии</label>
             <button type="button" className="filter-reset" onClick={resetFilters}>Сбросить фильтры</button>
           </aside>
           <div className="catalog-results">
             <div className="catalog-toolbar"><span>Найдено: {totalCount}</span>
               <label>Сортировать <select aria-label="Сортировка товаров" value={sort}
-                onChange={e=>{setSort(e.target.value as Sort);setPage(1)}}>
+                onChange={e=>catalogNavigate({sort:e.target.value as Sort,page:1})}>
                 <option value="popular">По популярности</option>
                 <option value="cheap">Сначала дешёвые</option>
                 <option value="expensive">Сначала дорогие</option>
@@ -263,9 +303,9 @@ export default function Shop() {
               <p>Попробуйте изменить поиск или диапазон цен.</p>
               <button onClick={resetFilters}>Сбросить фильтры</button></div>:null}
             {totalPages>1 && <nav className="catalog-pagination" aria-label="Страницы каталога">
-              <button disabled={page<=1||pageLoading} onClick={()=>{setPage(page-1);window.scrollTo({top:0,behavior:"smooth"})}}>← Назад</button>
+              <button disabled={page<=1||pageLoading} onClick={()=>catalogNavigate({page:page-1})}>← Назад</button>
               <span>Страница {page} из {totalPages}</span>
-              <button disabled={page>=totalPages||pageLoading} onClick={()=>{setPage(page+1);window.scrollTo({top:0,behavior:"smooth"})}}>Вперёд →</button>
+              <button disabled={page>=totalPages||pageLoading} onClick={()=>catalogNavigate({page:page+1})}>Вперёд →</button>
             </nav>}
           </div>
         </div>
@@ -279,7 +319,7 @@ export default function Shop() {
           : <div className="empty-panel"><span>🛒</span><h2>Корзина пуста</h2><p>Добавьте товары из каталога, чтобы увидеть их здесь.</p><button onClick={() => openCategory("all")}>Перейти в каталог</button></div>}
       </section>}
     </main>
-    <footer className="site-footer"><div className="container footer-body"><div><div className="footer-logo">v.<span>vira shop</span></div><p>Удобный магазин начинается с мелочей. Мы только начинаем.</p></div><div><strong>Покупателям</strong><button onClick={() => openCategory("all")}>Каталог</button><button onClick={() => go("favorites")}>Избранное</button><button onClick={() => go("cart")}>Корзина</button></div><div><strong>О проекте</strong><p>Этап 4 · Развитие каталога</p><p>Оплата и реальные заказы ещё не доступны.</p></div></div><div className="container footer-bottom"><span>© {new Date().getFullYear()} Vira Shop</span><span>Next.js · React · TypeScript</span></div></footer>
+    <footer className="site-footer"><div className="container footer-body"><div><div className="footer-logo">v.<span>vira shop</span></div><p>Удобный магазин начинается с мелочей. Мы только начинаем.</p></div><div><strong>Покупателям</strong><button onClick={() => openCategory("all")}>Каталог</button><button onClick={() => go("favorites")}>Избранное</button><button onClick={() => go("cart")}>Корзина</button></div><div><strong>О проекте</strong><p>Этап 0.7 · Навигация по каталогу</p><p>Тестовые заявки доступны · онлайн-оплата отключена.</p></div></div><div className="container footer-bottom"><span>© {new Date().getFullYear()} Vira Shop</span><span>Next.js · React · TypeScript</span></div></footer>
 
   </>;
 }

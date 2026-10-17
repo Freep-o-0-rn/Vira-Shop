@@ -10,6 +10,7 @@ jobs:
         with:
           node-version: '24'
       - run: npm install --no-audit --no-fund
+      - run: node --experimental-strip-types scripts/test-catalog-route.mjs
       - run: npm run typecheck
       - run: npm run build
 
