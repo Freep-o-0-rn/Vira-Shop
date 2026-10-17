@@ -92,7 +92,7 @@ export function categoryInput(value: unknown): { data: { id: string; title: stri
   if (!isCategoryId(obj.id) || typeof obj.title !== "string" || obj.title.trim().length < 1 || obj.title.length > 120) {
     return { error: "Неверный ID или название категории." };
   }
-  if (typeof obj.emoji !== "string" || obj.emoji.length > 16 ||
+  if (typeof obj.emoji !== "string" || obj.emoji.length > 48 ||
       typeof obj.tone !== "string" || !["blue", "peach", "pink", "green", "lilac"].includes(obj.tone) ||
       typeof obj.active !== "boolean") {
     return { error: "Некорректная иконка, цвет или статус категории." };

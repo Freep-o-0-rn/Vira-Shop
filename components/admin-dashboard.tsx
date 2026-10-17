@@ -1,6 +1,12 @@
 "use client";
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import {EMOJI_CHOICES,suggestCategoryEmoji,suggestedSpecs,fillMissingSpecs,type Specification} from "@/lib/admin-form-helpers";
+import dynamic from "next/dynamic";
+
+const FullEmojiPicker=dynamic(()=>import("@/components/admin-emoji-picker"),{
+  ssr:false,
+  loading:()=> <p className="admin-emoji-loading" role="status">Загружаем эмодзи…</p>
+});
 
 type AdminOrder={id:string;status:string;paymentStatus:string;totalMinor:string;address:{recipient:string;phone:string;city:string;street:string;building:string;apartment:string};note:string;createdAt:string;customerName:string;customerEmail:string;items:{id:string;title:string;quantity:number;lineMinor:string}[]};
 const labels:Record<string,string>={new:"Новый",confirmed:"Подтверждён",packing:"Сборка",shipped:"Отправлен",completed:"Завершён",cancelled:"Отменён"};
@@ -275,7 +281,7 @@ export default function AdminDashboard({login}:{login:string}) {
         <div className="admin-emoji-field">
           <label htmlFor="admin-category-emoji">Иконка / эмодзи</label>
           <div className="admin-emoji-controls">
-            <input id="admin-category-emoji" maxLength={16} value={editingCategory.emoji} aria-label="Эмодзи категории"
+            <input id="admin-category-emoji" maxLength={48} value={editingCategory.emoji} aria-label="Эмодзи категории"
               onChange={e=>{setEmojiAuto(false);setEditingCategory({...editingCategory,emoji:e.target.value});}}/>
             <button type="button" aria-expanded={emojiPickerOpen} aria-controls="admin-emoji-picker"
               className="admin-emoji-toggle" onClick={()=>setEmojiPickerOpen(!emojiPickerOpen)}>😀 Выбрать</button>
@@ -285,14 +291,20 @@ export default function AdminDashboard({login}:{login:string}) {
             setEditingCategory({...editingCategory,emoji:suggestCategoryEmoji(editingCategory.title)});
             setEmojiPickerOpen(false);
           }}>✨ {emojiAuto?"Подбирается автоматически":"Подобрать по названию"}</button>
-          {emojiPickerOpen&&<div className="admin-emoji-picker" id="admin-emoji-picker" aria-label="Список эмодзи">
-            {EMOJI_CHOICES.map(group=><div key={group.label}>
-              <strong>{group.label}</strong>
-              <div className="admin-emoji-grid">{group.items.map(emoji=>
-                <button key={emoji} type="button" title={emoji} aria-label={"Выбрать "+emoji}
-                  onClick={()=>{setEditingCategory({...editingCategory,emoji});setEmojiAuto(false);setEmojiPickerOpen(false);}}>{emoji}</button>)}
-              </div>
-            </div>)}
+          {emojiPickerOpen&&<div className="admin-emoji-picker" id="admin-emoji-picker" aria-label="Выбор эмодзи">
+            <div className="admin-emoji-picker-title"><strong>Выбери иконку категории</strong>
+              <span>Поиск на русском • категории • оттенки кожи</span></div>
+            <div className="admin-emoji-favorites" aria-label="Быстрые эмодзи">
+              {EMOJI_CHOICES[0].items.map(emoji=><button key={emoji} type="button"
+                aria-label={"Выбрать "+emoji} title={"Выбрать "+emoji}
+                onClick={()=>{setEditingCategory({...editingCategory,emoji});setEmojiAuto(false);setEmojiPickerOpen(false);}}>
+                {emoji}</button>)}
+            </div>
+            <FullEmojiPicker onSelect={emoji=>{
+              setEditingCategory(current=>current?{...current,emoji}:current);
+              setEmojiAuto(false);
+              setEmojiPickerOpen(false);
+            }}/>
           </div>}
         </div>
         <label>Цвет<select value={editingCategory.tone} onChange={e=>setEditingCategory({...editingCategory,tone:e.target.value})}><option value="blue">Голубой</option><option value="peach">Персиковый</option><option value="pink">Розовый</option><option value="green">Зелёный</option><option value="lilac">Сиреневый</option></select></label>
