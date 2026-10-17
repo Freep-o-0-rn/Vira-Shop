@@ -2,8 +2,9 @@
 import {useEffect,useRef,useState} from "react";
 import Link from "next/link";
 type Address={id:string;recipient:string;phone:string;city:string;street:string;building:string;apartment:string};
-type CartItem={id:string;quantity:number;title:string;image:string;priceMinor:string;stock:number;available:boolean};
+type CartItem={id:string;variantId:string|null;selection:{name:string;value:string}[];quantity:number;title:string;image:string;priceMinor:string;stock:number;available:boolean};
 const KEY="vira-shop:cart:v1";
+const VARIANT_KEY="vira-shop:variant-cart:v1";
 const money=(v:number)=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB"}).format(v/100);
 async function api<T>(url:string,options?:RequestInit):Promise<T>{
  const res=await fetch(url,{cache:"no-store",...options});
@@ -18,6 +19,20 @@ function guestItems():{id:string;quantity:number}[]{
   return Object.entries(parsed).filter(([id,q])=>/^[a-zA-Z0-9_-]{1,64}$/.test(id) &&
     typeof q==="number" && Number.isInteger(q) && q>=1 && q<=99)
    .map(([id,quantity])=>({id,quantity:quantity as number}));
+ }catch{return [];}
+}
+function guestVariants():{id:string;variantId:string;quantity:number}[]{
+ try{
+  const saved:unknown=JSON.parse(localStorage.getItem(VARIANT_KEY)||"{}");
+  if(!saved||typeof saved!=="object"||Array.isArray(saved))return [];
+  return Object.entries(saved).flatMap(([variantId,value])=>{
+   if(!value||typeof value!=="object"||Array.isArray(value))return [];
+   const row=value as {productId?:unknown;quantity?:unknown};
+   return /^[0-9]{8,12}$/.test(variantId)&&
+      typeof row.productId==="string"&&/^[A-Za-z0-9_-]{1,64}$/.test(row.productId)&&
+      typeof row.quantity==="number"&&Number.isInteger(row.quantity)&&row.quantity>=1&&row.quantity<=99
+      ?[{id:row.productId,variantId,quantity:row.quantity}]:[];
+  });
  }catch{return [];}
 }
 export default function Checkout(){
@@ -42,10 +57,13 @@ export default function Checkout(){
     if(!active)return;
     setCustomer(session.customer);
     if(session.customer){
-      const saved=guestItems();
+      const variants=guestVariants();
+      const variantParents=new Set(variants.map(v=>v.id));
+      const saved=[...guestItems().filter(v=>!variantParents.has(v.id)),...variants];
       if(saved.length){
        await api("/api/account/cart",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:saved})});
        localStorage.removeItem(KEY);
+       localStorage.removeItem(VARIANT_KEY);
       }
       if(active)await refresh();
     }
@@ -54,11 +72,11 @@ export default function Checkout(){
   })();
   return()=>{active=false};
  },[]);
- async function change(id:string,quantity:number){
+ async function change(id:string,variantId:string|null,quantity:number){
   setBusy(true);setError("");
   try{
    const data=await api<{items:CartItem[]}>("/api/account/cart",{
-    method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:id,quantity})
+    method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:id,variantId,quantity})
    });setCart(data.items);
   }catch(e){setError(e instanceof Error?e.message:"Ошибка обновления корзины.");}
   finally{setBusy(false);}
@@ -72,7 +90,7 @@ export default function Checkout(){
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({addressId,note,key:requestKey.current})
    });
-   setSuccess(result.id);requestKey.current=null;localStorage.removeItem(KEY);setCart([]);
+   setSuccess(result.id);requestKey.current=null;localStorage.removeItem(KEY);localStorage.removeItem(VARIANT_KEY);setCart([]);
   }catch(e){setError(e instanceof Error?e.message:"Не удалось создать заказ.");}
   finally{setBusy(false);}
  }
@@ -92,15 +110,17 @@ export default function Checkout(){
      <Link href="/account" className="buyer-primary">Посмотреть заказы</Link></section>:
    <div className="buyer-layout">
     <section className="buyer-panel"><h2>Товары в корзине</h2>
-     {cart.length?cart.map(p=><div className="checkout-line" key={p.id}>
+     {cart.length?cart.map(p=><div className="checkout-line" key={p.id+":"+(p.variantId??"")}>
       {p.image?<img src={p.image} alt=""/>:<span>📦</span>}
       <div className="checkout-line-title"><strong>{p.title}</strong>
        <small>{money(Number(p.priceMinor))} / шт.</small>
+       {p.variantId&&<small>Артикул: {p.variantId}</small>}
+       {!!p.selection?.length&&<small>{p.selection.map(s=>s.name+": "+s.value).join(" · ")}</small>}
        {!p.available||p.stock<p.quantity?<em>Товар недоступен или его недостаточно</em>:null}</div>
       <div className="checkout-quantity">
-       <button disabled={busy} onClick={()=>void change(p.id,p.quantity-1)}>−</button>
+       <button disabled={busy} onClick={()=>void change(p.id,p.variantId,p.quantity-1)}>−</button>
        <span>{p.quantity}</span>
-       <button disabled={busy||p.quantity>=99||p.quantity>=p.stock} onClick={()=>void change(p.id,p.quantity+1)}>+</button></div>
+       <button disabled={busy||p.quantity>=99||p.quantity>=p.stock} onClick={()=>void change(p.id,p.variantId,p.quantity+1)}>+</button></div>
       <strong>{money(Number(p.priceMinor)*p.quantity)}</strong>
      </div>):<div className="buyer-muted"><p>Корзина пуста.</p><Link href="/" className="buyer-link">Выбрать товары →</Link></div>}
     </section>
