@@ -27,16 +27,32 @@ export async function POST(request: NextRequest) {
   try {
     const denied = await adminGuard(request, true);
     if (denied) return denied;
-    const input = productInput(await readJson(request));
+    const input = productInput(await readJson(request),true);
     if ("error" in input) return NextResponse.json({ error: input.error }, { status: 400 });
     const p = input.data;
-    const result = await getPool().query(
+    let created: {id:string}|null=null;
+    for(let attempt=0;attempt<5;attempt++){
+      try{
+    const result=await getPool().query<{id:string}>(
       `INSERT INTO shop_products
        (id, category_id, title, subtitle, description, price_minor, old_price_minor, image_url, badge, stock_count, is_active, images, specs)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb) RETURNING id`,
+       VALUES (CASE WHEN $1::text = '' THEN nextval('shop_product_article_seq')::text ELSE $1::text END,
+         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb) RETURNING id`,
       [p.id,p.category,p.title,p.subtitle,p.description,p.priceMinor,p.oldPriceMinor,p.image,p.badge,p.stock,p.active,p.images,JSON.stringify(p.specs)]
     );
-    return NextResponse.json({ id: result.rows[0].id }, { status: 201 });
-  } catch (err) { return err instanceof SyntaxError || (err instanceof Error && err.message.startsWith("Content-Type")) ?
+        created=result.rows[0];
+        break;
+      }catch(err){
+        const duplicate=err&&typeof err==="object"&&"code" in err&&err.code==="23505";
+        if(p.id===""&&duplicate&&attempt<4)continue;
+        throw err;
+      }
+    }
+    if(!created)throw new Error("Unable to allocate a unique article");
+    return NextResponse.json({ id: created.id, article: created.id }, { status: 201 });
+  } catch (err) {
+    if(err && typeof err==="object" && "code" in err && err.code==="23505")
+      return NextResponse.json({error:"Такой артикул уже существует. Повторите создание товара."},{status:409});
+    return err instanceof SyntaxError || (err instanceof Error && err.message.startsWith("Content-Type")) ?
     NextResponse.json({ error: "Некорректный JSON." }, { status: 400 }) : failureResponse(err); }
 }

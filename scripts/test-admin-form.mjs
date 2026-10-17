@@ -1,0 +1,16 @@
+import assert from "node:assert/strict";
+import {EMOJI_CHOICES,suggestCategoryEmoji,suggestedSpecs,fillMissingSpecs} from "../lib/admin-form-helpers.ts";
+assert.equal(suggestCategoryEmoji("Беспроводные наушники"),"🎧");
+assert.equal(suggestCategoryEmoji("Смартфоны"),"📱");
+assert.equal(suggestCategoryEmoji("Ноутбуки"),"💻");
+assert.equal(suggestCategoryEmoji("Товары для дома"),"🏠");
+assert.equal(suggestCategoryEmoji("Коврики для фитнеса"),"🏋️");
+assert.equal(suggestCategoryEmoji("Автозапчасти"),"🚗");
+assert.equal(suggestCategoryEmoji("Подарки"),"🎁");
+assert.equal(suggestCategoryEmoji("Несуществующая категория"),"📦");
+assert.ok(EMOJI_CHOICES.reduce((n,g)=>n+g.items.length,0)>=45);
+assert.ok(suggestedSpecs("Электроника").includes("Модель"));
+const specs=fillMissingSpecs([{name:"Материал",value:"Дерево"}],["Материал","Цвет"]);
+assert.deepEqual(specs,[{name:"Материал",value:"Дерево"},{name:"Цвет",value:""}]);
+assert.equal(fillMissingSpecs(Array.from({length:20},(_,i)=>({name:String(i),value:"x"})),["Бренд"]).length,20);
+console.log("Emoji recommendations and category spec presets pass.");

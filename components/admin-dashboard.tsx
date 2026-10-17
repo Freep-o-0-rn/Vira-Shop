@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import {EMOJI_CHOICES,suggestCategoryEmoji,suggestedSpecs,fillMissingSpecs,type Specification} from "@/lib/admin-form-helpers";
 
 type AdminOrder={id:string;status:string;paymentStatus:string;totalMinor:string;address:{recipient:string;phone:string;city:string;street:string;building:string;apartment:string};note:string;createdAt:string;customerName:string;customerEmail:string;items:{id:string;title:string;quantity:number;lineMinor:string}[]};
 const labels:Record<string,string>={new:"Новый",confirmed:"Подтверждён",packing:"Сборка",shipped:"Отправлен",completed:"Завершён",cancelled:"Отменён"};
@@ -11,9 +12,9 @@ type Product = {
   image: string; images: string[]; specs: {name:string;value:string}[]; badge: string | null; price: string; oldPrice: string | null; stock: number; active: boolean;
 };
 type FormProduct = { id: string; category: string; title: string; subtitle: string; description: string;
-  image: string; extraImages: string; specsText: string; badge: string; price: string; oldPrice: string; stock: string; active: boolean };
+  image: string; extraImages: string; specs: Specification[]; badge: string; price: string; oldPrice: string; stock: string; active: boolean };
 type FormCategory = { id: string; title: string; emoji: string; tone: string; active: boolean };
-const blankProduct = (): FormProduct => ({ id:"", category:"",title:"",subtitle:"",description:"",image:"",extraImages:"",specsText:"",badge:"",price:"",oldPrice:"",stock:"0",active:true });
+const blankProduct = (): FormProduct => ({ id:"", category:"",title:"",subtitle:"",description:"",image:"",extraImages:"",specs:[],badge:"",price:"",oldPrice:"",stock:"0",active:true });
 const blankCategory = (): FormCategory => ({ id:"",title:"",emoji:"📦",tone:"blue",active:true });
 const price = (s: string | null) => s === null ? "—" : new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB",maximumFractionDigits:2}).format(Number(s));
 async function api<T = unknown>(url: string, init?: RequestInit): Promise<T> {
@@ -37,6 +38,8 @@ export default function AdminDashboard({login}:{login:string}) {
   const [existingProduct,setExistingProduct]=useState(false);
   const [editingCategory,setEditingCategory]=useState<FormCategory|null>(null);
   const [existingCategory,setExistingCategory]=useState(false);
+  const [emojiAuto,setEmojiAuto]=useState(true);
+  const [emojiPickerOpen,setEmojiPickerOpen]=useState(false);
   const [filter,setFilter]=useState("");
   const refresh=useCallback(async()=>{
     const [p,c,o]=await Promise.all([
@@ -57,26 +60,27 @@ export default function AdminDashboard({login}:{login:string}) {
   },[refresh]);
   const notice=(message:string)=>{setError("");setSuccess(message);};
   const startAddProduct=()=>{setEditingProduct({...blankProduct(),category:categories.find(c=>c.active)?.id || categories[0]?.id || ""});setExistingProduct(false);setError("");setSuccess("");};
-  const editProduct=(p:Product)=>{setEditingProduct({...p,extraImages:(p.images||[]).filter(x=>x!==p.image).join("\n"),specsText:(p.specs||[]).map(s=>s.name+": "+s.value).join("\n"),oldPrice:p.oldPrice??"",badge:p.badge??"",stock:String(p.stock)});setExistingProduct(true);setError("");setSuccess("");};
-  const startAddCategory=()=>{setEditingCategory(blankCategory());setExistingCategory(false);setError("");setSuccess("");};
-  const editCategory=(c:Category)=>{setEditingCategory({...c});setExistingCategory(true);setError("");setSuccess("");};
+  const editProduct=(p:Product)=>{setEditingProduct({...p,extraImages:(p.images||[]).filter(x=>x!==p.image).join("\n"),specs:p.specs??[],oldPrice:p.oldPrice??"",badge:p.badge??"",stock:String(p.stock)});setExistingProduct(true);setError("");setSuccess("");};
+  const startAddCategory=()=>{setEditingCategory(blankCategory());setExistingCategory(false);setEmojiAuto(true);setEmojiPickerOpen(false);setError("");setSuccess("");};
+  const editCategory=(c:Category)=>{setEditingCategory({...c});setExistingCategory(true);setEmojiAuto(c.emoji===suggestCategoryEmoji(c.title));setEmojiPickerOpen(false);setError("");setSuccess("");};
   async function saveProduct(event:FormEvent<HTMLFormElement>){
     event.preventDefault();if(!editingProduct)return;
     setPending(true);setError("");setSuccess("");
     try{
       const extra=editingProduct.extraImages.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-      const specs=editingProduct.specsText.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map(line=>{
-        const separator=line.indexOf(":");
-        if(separator<=0||!line.slice(separator+1).trim())throw Error("Каждую характеристику укажите как «Название: Значение».");
-        return {name:line.slice(0,separator).trim(),value:line.slice(separator+1).trim()};
-      });
+      const specs=editingProduct.specs.map(item=>({name:item.name.trim(),value:item.value.trim()}))
+        .filter(item=>item.name||item.value);
+      if(specs.some(item=>!item.name||!item.value))throw Error("Заполните название и значение каждой характеристики.");
+      if(specs.length>20)throw Error("Не более 20 характеристик.");
+      if(new Set(specs.map(item=>item.name.toLocaleLowerCase("ru"))).size!==specs.length)
+        throw Error("Названия характеристик не должны повторяться.");
       const images=[...new Set([editingProduct.image.trim(),...extra].filter(Boolean))];
       if(images.length>8)throw Error("Можно добавить не более 8 фотографий.");
       const payload={...editingProduct,images,specs,stock:Number(editingProduct.stock)};
-      await api(existingProduct ? "/api/admin/products/"+encodeURIComponent(editingProduct.id):"/api/admin/products",{
+      const saved=await api<{id:string}>(existingProduct ? "/api/admin/products/"+encodeURIComponent(editingProduct.id):"/api/admin/products",{
         method:existingProduct?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)
       });
-      setEditingProduct(null);await refresh();notice(existingProduct?"Товар обновлён.":"Товар создан.");
+      setEditingProduct(null);await refresh();notice(existingProduct?"Товар обновлён: "+saved.id:"Товар создан. Артикул № "+saved.id);
     }catch(e){setError(e instanceof Error?e.message:"Ошибка сохранения.");}
     finally{setPending(false);}
   }
@@ -212,7 +216,11 @@ export default function AdminDashboard({login}:{login:string}) {
       <div className="admin-modal-heading"><div><span className="admin-eyebrow">КАТАЛОГ</span><h2>{existingProduct?"Редактировать товар":"Новый товар"}</h2></div><button disabled={pending} aria-label="Закрыть" onClick={()=>setEditingProduct(null)}>×</button></div>
       <form onSubmit={e=>void saveProduct(e)}>
         <div className="admin-form-grid">
-          <label>ID товара<input required readOnly={existingProduct} value={editingProduct.id} placeholder="sku_001" maxLength={64} onChange={e=>setEditingProduct({...editingProduct,id:e.target.value})}/></label>
+          <label>Артикул товара
+            <input readOnly tabIndex={-1} className="admin-article-readonly"
+              value={existingProduct?editingProduct.id:"Присвоится автоматически"}/>
+            <small className="admin-field-help">{existingProduct?"Неизменяемый артикул — используется в ссылках и заказах.":"Уникальный числовой артикул создаётся сервером после сохранения."}</small>
+          </label>
           <label>Категория<select value={editingProduct.category} required onChange={e=>setEditingProduct({...editingProduct,category:e.target.value})}><option value="">Выберите категорию</option>{categories.map(c=><option value={c.id} key={c.id}>{c.title}</option>)}</select></label>
           <label className="full">Название товара<input required maxLength={200} value={editingProduct.title} onChange={e=>setEditingProduct({...editingProduct,title:e.target.value})}/></label>
           <label className="full">Краткая характеристика<input maxLength={500} value={editingProduct.subtitle} onChange={e=>setEditingProduct({...editingProduct,subtitle:e.target.value})}/></label>
@@ -225,9 +233,29 @@ export default function AdminDashboard({login}:{login:string}) {
           <label className="full">Дополнительные фотографии (HTTPS-ссылки, по одной на строку; всего не более 8)
             <textarea rows={3} value={editingProduct.extraImages} placeholder={"https://.../photo-2.jpg\nhttps://.../photo-3.jpg"}
               onChange={e=>setEditingProduct({...editingProduct,extraImages:e.target.value})}/></label>
-          <label className="full">Характеристики (каждая с новой строки: Название: Значение)
-            <textarea rows={4} value={editingProduct.specsText} placeholder={"Цвет: Чёрный\nМатериал: Пластик"}
-              onChange={e=>setEditingProduct({...editingProduct,specsText:e.target.value})}/></label>
+          <div className="admin-spec-editor full">
+            <div className="admin-spec-top"><div><strong>Характеристики товара</strong>
+              <small>Используются для фильтрации товаров в каталоге.</small></div>
+              <button type="button" className="admin-soft-button" disabled={pending||editingProduct.specs.length>=20}
+                onClick={()=>setEditingProduct({...editingProduct,specs:fillMissingSpecs(editingProduct.specs,
+                  suggestedSpecs(categories.find(c=>c.id===editingProduct.category)?.title??""))})}>
+                ✨ Шаблон категории
+              </button>
+            </div>
+            {editingProduct.specs.map((item,i)=><div className="admin-spec-row" key={i}>
+              <input aria-label={"Название характеристики "+(i+1)} placeholder="Например: Цвет" maxLength={80}
+                value={item.name} onChange={e=>setEditingProduct({...editingProduct,specs:editingProduct.specs.map((spec,k)=>k===i?{...spec,name:e.target.value}:spec)})}/>
+              <input aria-label={"Значение характеристики "+(i+1)} placeholder="Например: Чёрный" maxLength={200}
+                value={item.value} onChange={e=>setEditingProduct({...editingProduct,specs:editingProduct.specs.map((spec,k)=>k===i?{...spec,value:e.target.value}:spec)})}/>
+              <button type="button" title="Удалить характеристику" aria-label={"Удалить характеристику "+(i+1)} disabled={pending}
+                onClick={()=>setEditingProduct({...editingProduct,specs:editingProduct.specs.filter((_,k)=>k!==i)})}>×</button>
+            </div>)}
+            {editingProduct.specs.length===0&&<p className="admin-spec-empty">Характеристик пока нет. Добавьте строку или используйте шаблон.</p>}
+            <button type="button" className="admin-soft-button" disabled={pending||editingProduct.specs.length>=20}
+              onClick={()=>setEditingProduct({...editingProduct,specs:[...editingProduct.specs,{name:"",value:""}]})}>
+              + Добавить характеристику ({editingProduct.specs.length}/20)
+            </button>
+          </div>
           <label className="full">Или загрузите фотографию (PNG/JPEG/WebP, до 5 МБ; локально)<input disabled={pending} type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>void upload(e)}/></label>
           {editingProduct.image&&<div className="admin-preview"><img src={editingProduct.image} alt="Главная фотография товара"/></div>}
           <label className="admin-check full"><input type="checkbox" checked={editingProduct.active} onChange={e=>setEditingProduct({...editingProduct,active:e.target.checked})}/> Показывать товар в магазине</label>
@@ -239,8 +267,34 @@ export default function AdminDashboard({login}:{login:string}) {
       <div className="admin-modal-heading"><div><span className="admin-eyebrow">КАТЕГОРИИ</span><h2>{existingCategory?"Изменить категорию":"Новая категория"}</h2></div><button disabled={pending} aria-label="Закрыть" onClick={()=>setEditingCategory(null)}>×</button></div>
       <form onSubmit={e=>void saveCategory(e)}><div className="admin-form-grid">
         <label className="full">Идентификатор<input required readOnly={existingCategory} value={editingCategory.id} placeholder="new_category" onChange={e=>setEditingCategory({...editingCategory,id:e.target.value})}/></label>
-        <label className="full">Название<input required maxLength={120} value={editingCategory.title} onChange={e=>setEditingCategory({...editingCategory,title:e.target.value})}/></label>
-        <label>Иконка / emoji<input maxLength={16} value={editingCategory.emoji} onChange={e=>setEditingCategory({...editingCategory,emoji:e.target.value})}/></label>
+        <label className="full">Название<input required maxLength={120} value={editingCategory.title}
+          placeholder="Например: Электроника" onChange={e=>{
+            const title=e.target.value;
+            setEditingCategory({...editingCategory,title,emoji:emojiAuto?suggestCategoryEmoji(title):editingCategory.emoji});
+          }}/></label>
+        <div className="admin-emoji-field">
+          <label htmlFor="admin-category-emoji">Иконка / эмодзи</label>
+          <div className="admin-emoji-controls">
+            <input id="admin-category-emoji" maxLength={16} value={editingCategory.emoji} aria-label="Эмодзи категории"
+              onChange={e=>{setEmojiAuto(false);setEditingCategory({...editingCategory,emoji:e.target.value});}}/>
+            <button type="button" aria-expanded={emojiPickerOpen} aria-controls="admin-emoji-picker"
+              className="admin-emoji-toggle" onClick={()=>setEmojiPickerOpen(!emojiPickerOpen)}>😀 Выбрать</button>
+          </div>
+          <button type="button" className="admin-emoji-autofill" onClick={()=>{
+            setEmojiAuto(true);
+            setEditingCategory({...editingCategory,emoji:suggestCategoryEmoji(editingCategory.title)});
+            setEmojiPickerOpen(false);
+          }}>✨ {emojiAuto?"Подбирается автоматически":"Подобрать по названию"}</button>
+          {emojiPickerOpen&&<div className="admin-emoji-picker" id="admin-emoji-picker" aria-label="Список эмодзи">
+            {EMOJI_CHOICES.map(group=><div key={group.label}>
+              <strong>{group.label}</strong>
+              <div className="admin-emoji-grid">{group.items.map(emoji=>
+                <button key={emoji} type="button" title={emoji} aria-label={"Выбрать "+emoji}
+                  onClick={()=>{setEditingCategory({...editingCategory,emoji});setEmojiAuto(false);setEmojiPickerOpen(false);}}>{emoji}</button>)}
+              </div>
+            </div>)}
+          </div>}
+        </div>
         <label>Цвет<select value={editingCategory.tone} onChange={e=>setEditingCategory({...editingCategory,tone:e.target.value})}><option value="blue">Голубой</option><option value="peach">Персиковый</option><option value="pink">Розовый</option><option value="green">Зелёный</option><option value="lilac">Сиреневый</option></select></label>
         <label className="admin-check full"><input type="checkbox" checked={editingCategory.active} onChange={e=>setEditingCategory({...editingCategory,active:e.target.checked})}/> Категория активна</label>
       </div><div className="admin-form-bottom"><button type="button" disabled={pending} onClick={()=>setEditingCategory(null)}>Отмена</button><button type="submit" className="admin-primary" disabled={pending}>{pending?"Сохраняем…":"Сохранить"}</button></div></form>

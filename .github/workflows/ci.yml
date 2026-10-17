@@ -11,6 +11,7 @@ jobs:
           node-version: '24'
       - run: npm install --no-audit --no-fund
       - run: node --experimental-strip-types scripts/test-catalog-route.mjs
+      - run: node --experimental-strip-types scripts/test-admin-form.mjs
       - run: npm run typecheck
       - run: npm run build
 

@@ -72,6 +72,26 @@ await check("/api/admin/categories/test_c",{method:"PUT",body:{...category,activ
 const visible=await check("/api/categories");
 assert.equal(visible.data.items.some(c=>c.id==="test_c"),false);
 await check("/api/admin/products",{method:"POST",body:product,status:403,cookie,origin:"https://attacker.example"});
+// Preserve legacy alphanumeric ids but issue new SKUs server-side.
+const oldNumeric={...product,id:"10000000",title:"Legacy numeric item"};
+const legacy=await check("/api/admin/products",{method:"POST",status:201,body:oldNumeric,...auth});
+assert.equal(legacy.data.id,"10000000");
+await check("/api/admin/products",{method:"POST",status:409,body:oldNumeric,...auth});
+const generated={...product,id:"",title:"Article from sequence"};
+const firstGenerated=await check("/api/admin/products",{method:"POST",status:201,body:generated,...auth});
+assert.match(firstGenerated.data.id,/^[0-9]{8,12}$/);
+assert.ok(BigInt(firstGenerated.data.id)>10000000n,"Automatically allocated SKU must skip existing numeric ID");
+assert.equal(firstGenerated.data.article,firstGenerated.data.id);
+const autoProducts=await Promise.all(Array.from({length:4},(_,i)=>
+  check("/api/admin/products",{method:"POST",status:201,body:{...generated,id:undefined,title:"Generated "+i},...auth})));
+const ids=autoProducts.map(x=>x.data.id);
+assert.equal(new Set([firstGenerated.data.id,...ids]).size,5);
+assert.ok(ids.every(id=>/^[0-9]{8,12}$/.test(id)));
+await check("/api/admin/products/"+firstGenerated.data.id,{
+  method:"PUT",status:400,body:{...generated,id:"changed_article"},...auth
+});
+const adminList=await check("/api/admin/products",{...auth});
+assert.ok(adminList.data.items.some(p=>p.id===firstGenerated.data.id));
 await check("/api/admin/upload",{method:"POST",status:501,...auth});
 await check("/api/admin/session",{method:"DELETE",...auth});
 await check("/api/admin/products",{status:401,cookie});

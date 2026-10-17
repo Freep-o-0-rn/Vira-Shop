@@ -33,10 +33,10 @@ export function validImage(value: string): boolean {
   try { const url = new URL(value); return url.protocol === "https:" && value.length <= 1500 && !url.username && !url.password; }
   catch { return false; }
 }
-export function productInput(value: unknown): { data: ProductInput } | { error: string } {
+export function productInput(value: unknown, autoArticle = false): { data: ProductInput } | { error: string } {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { error: "Передайте объект товара." };
   const obj = value as Record<string, unknown>;
-  if (!isId(obj.id)) return { error: "Идентификатор: 1–64 символа, латиница, цифры, _ или -." };
+  if (!isId(obj.id) && !(autoArticle && (obj.id === "" || obj.id === undefined))) return { error: "Неверный артикул товара." };
   if (!isCategoryId(obj.category)) return { error: "Укажите допустимую категорию." };
   if (typeof obj.title !== "string" || obj.title.trim().length < 1 || obj.title.length > 200) return { error: "Название: 1–200 символов." };
   const subtitle = typeof obj.subtitle === "string" ? obj.subtitle.trim() : "";
@@ -82,7 +82,7 @@ export function productInput(value: unknown): { data: ProductInput } | { error: 
   }
   if (typeof obj.active !== "boolean") return { error: "Укажите статус товара." };
   return {
-    data: { id: obj.id, category: obj.category, title: obj.title.trim(),
+    data: { id: typeof obj.id === "string" ? obj.id : "", category: obj.category, title: obj.title.trim(),
       subtitle, description, badge, image: images[0] ?? '', images, specs, priceMinor, oldPriceMinor, stock, active: obj.active }
   };
 }
