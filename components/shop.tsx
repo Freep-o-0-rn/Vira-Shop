@@ -125,7 +125,7 @@ export default function Shop() {
           if(data.source)setCatalogSource(data.source);
         }
       }catch(err){
-        if(!controller.signal.aborted)setPageError(err instanceof Error?err.message:"Ошибка каталога.");
+        if(!controller.signal.aborted){setPageProducts([]);setTotalCount(0);setTotalPages(0);setPageError(err instanceof Error?err.message:"Ошибка каталога.");}
       }finally{if(!controller.signal.aborted)setPageLoading(false);}
     };
     // Do not send a request on every keystroke.
@@ -193,7 +193,7 @@ export default function Shop() {
       <div className="container header-inner">
         <button type="button" className="brand" onClick={() => go("home")} aria-label="Vira Shop — главная"><span className="brand-mark">v.</span><span className="brand-name">vira<span>shop</span></span></button>
         <button type="button" className="catalog-trigger" onClick={() => openCategory("all")}><Icon name="grid"/> <span>Каталог</span></button>
-        <form className="search-form" onSubmit={searchSubmit}><input type="search" aria-label="Поиск товаров" placeholder="Искать товары и категории" value={query} onChange={(event) => setQuery(event.target.value)}/><button type="submit" aria-label="Найти"><Icon name="search"/> <span>Найти</span></button></form>
+        <form className="search-form" onSubmit={searchSubmit}><input type="search" aria-label="Поиск товаров" placeholder="Искать товары и категории" value={query} onChange={(event) => {setQuery(event.target.value);setPage(1);}}/><button type="submit" aria-label="Найти"><Icon name="search"/> <span>Найти</span></button></form>
         <nav className="header-nav" aria-label="Разделы магазина">
           <button type="button" onClick={() => go("favorites")} className={view === "favorites" ? "active" : ""}><Icon name="heart"/><span>Избранное</span>{favorites.length > 0 && <small>{favorites.length}</small>}</button>
           <button type="button" onClick={() => go("cart")} className={view === "cart" ? "active" : ""}><Icon name="bag"/><span>Корзина</span>{cartCount > 0 && <small>{cartCount}</small>}</button>

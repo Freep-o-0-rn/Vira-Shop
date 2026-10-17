@@ -38,12 +38,17 @@ const category={id:"test_c",title:"Проверочная категория",em
 await check("/api/admin/categories",{status:201,method:"POST",body:category,...auth});
 let active=await check("/api/categories");
 assert.ok(active.data.items.some(c=>c.id==="test_c"));
-const product={id:"test_sku",category:"test_c",title:"Проверочный товар",subtitle:"Тест",description:"Проверка API",image:"",badge:"Новинка",price:"1499.50",oldPrice:"1899.99",stock:7,active:true};
+const product={id:"test_sku",category:"test_c",title:"Проверочный товар",subtitle:"Тест",description:"Проверка API",image:"https://images.unsplash.com/photo-1505740420928-5e560c06d30e",images:["https://images.unsplash.com/photo-1505740420928-5e560c06d30e","https://images.unsplash.com/photo-1523275335684-37898b6baf30"],specs:[{name:"Материал",value:"Пластик"},{name:"Цвет",value:"Чёрный"}],badge:"Новинка",price:"1499.50",oldPrice:"1899.99",stock:7,active:true};
 await check("/api/admin/products",{status:201,method:"POST",body:product,...auth});
 let c=await check("/api/products?q=%D0%9F%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BE%D1%87%D0%BD%D1%8B%D0%B9");
 assert.equal(c.data.total,1);
 assert.equal(c.data.items[0].price,1499.5);
 assert.equal(c.data.items[0].stock,7);
+assert.equal(c.data.items[0].images.length,2);
+assert.equal(c.data.items[0].specs[1].value,"Чёрный");
+const details=await check("/api/products/test_sku");
+assert.equal(details.data.item.images.length,2);
+assert.equal(details.data.item.specs[0].name,"Материал");
 await check("/api/admin/products/test_sku",{method:"PUT",body:{...product,price:"1550.25",stock:2},...auth});
 c=await check("/api/products?category=test_c");
 assert.equal(c.data.items[0].price,1550.25);
