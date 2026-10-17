@@ -29,6 +29,28 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
     return NextResponse.json({ id: result.rows[0].id });
   } catch (err) { return failureResponse(err); }
 }
+export async function PATCH(request: NextRequest, { params }: Ctx) {
+  try {
+    const denied=await adminGuard(request,true);
+    if(denied)return denied;
+    const {id}=await params;
+    if(!isId(id))return NextResponse.json({error:"Некорректный ID товара."},{status:400});
+    let body:unknown;
+    try { body=await readJson(request); }
+    catch { return NextResponse.json({error:"Некорректный JSON."},{status:400}); }
+    if(!body || typeof body!=="object" || Array.isArray(body) ||
+       !("active" in body) || typeof body.active!=="boolean")
+      return NextResponse.json({error:"Укажите active: true или false."},{status:400});
+    const active=body.active;
+    const result=await getPool().query(
+      "UPDATE shop_products SET is_active=$2,updated_at=NOW() WHERE id=$1 RETURNING id,is_active AS active",
+      [id,active]
+    );
+    if(!result.rowCount)return NextResponse.json({error:"Товар не найден."},{status:404});
+    return NextResponse.json({id,active},{headers:{"Cache-Control":"no-store"}});
+  }catch(err){return failureResponse(err);}
+}
+
 export async function DELETE(request: NextRequest, { params }: Ctx) {
   try {
     const denied = await adminGuard(request, true);

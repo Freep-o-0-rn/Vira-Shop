@@ -80,11 +80,20 @@ export default function AdminDashboard({login}:{login:string}) {
     }catch(e){setError(e instanceof Error?e.message:"Ошибка сохранения.");}
     finally{setPending(false);}
   }
-  async function hideProduct(p:Product){
-    if(!confirm("Скрыть товар «"+p.title+"» из публичного каталога? Запись останется в базе."))return;
+  async function toggleProductVisibility(p:Product){
+    const active=!p.active;
+    if(!active && !confirm("Скрыть товар «"+p.title+"» из публичного каталога? Запись останется в базе."))return;
     setPending(true);setError("");setSuccess("");
-    try{await api("/api/admin/products/"+encodeURIComponent(p.id),{method:"DELETE"});await refresh();notice("Товар скрыт. Его можно снова включить через редактирование.");}
-    catch(e){setError(e instanceof Error?e.message:"Ошибка.");}finally{setPending(false);}
+    try{
+      await api("/api/admin/products/"+encodeURIComponent(p.id),{
+        method:"PATCH",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({active})
+      });
+      await refresh();
+      notice(active?"Товар снова включён в каталог. Если категория скрыта, откройте и её.":"Товар скрыт из магазина.");
+    }catch(e){setError(e instanceof Error?e.message:"Ошибка изменения видимости.");}
+    finally{setPending(false);}
   }
   async function saveCategory(event:FormEvent<HTMLFormElement>){
     event.preventDefault();if(!editingCategory)return;
@@ -158,9 +167,20 @@ export default function AdminDashboard({login}:{login:string}) {
           <div className="admin-panel">
             <div className="admin-toolbar"><h2>Каталог</h2><input aria-label="Поиск товаров в админ-панели" placeholder="Поиск по названию или ID" value={filter} onChange={e=>setFilter(e.target.value)}/></div>
             <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Товар</th><th>Цена</th><th>Остаток</th><th>Статус</th><th>Действия</th></tr></thead><tbody>{visible.map(p=><tr key={p.id}>
-              <td><div className="admin-product-name">{p.image?<img src={p.image} alt="" loading="lazy"/>:<span>📦</span>}<div><strong>{p.title}</strong><small>{p.id} · {categories.find(c=>c.id===p.category)?.title??p.category}</small></div></div></td>
+              <td><div className="admin-product-name">
+                {p.active?
+                  <a className="admin-product-link" href={"/product/"+encodeURIComponent(p.id)}
+                     target="_blank" rel="noopener noreferrer" title="Открыть карточку товара в магазине (новая вкладка)">
+                    {p.image?<img src={p.image} alt="" loading="lazy"/>:<span className="admin-product-icon">📦</span>}
+                    <span className="admin-product-meta"><strong>{p.title}</strong><small>{p.id} · {categories.find(c=>c.id===p.category)?.title??p.category}</small></span>
+                  </a>:
+                  <div className="admin-product-link admin-product-hidden" title="Сначала нажмите «Показать», чтобы открыть карточку в магазине">
+                    {p.image?<img src={p.image} alt="" loading="lazy"/>:<span className="admin-product-icon">📦</span>}
+                    <span className="admin-product-meta"><strong>{p.title}</strong><small>{p.id} · {categories.find(c=>c.id===p.category)?.title??p.category}</small></span>
+                  </div>}
+              </div></td>
               <td><strong>{price(p.price)}</strong></td><td>{p.stock} шт.</td><td><span className={"admin-pill "+(p.active?"is-active":"")}>{p.active?"В каталоге":"Скрыт"}</span></td>
-              <td><div className="admin-actions"><button disabled={pending} onClick={()=>editProduct(p)}>Изменить</button>{p.active&&<button disabled={pending} onClick={()=>void hideProduct(p)}>Скрыть</button>}</div></td>
+              <td><div className="admin-actions"><button disabled={pending} onClick={()=>editProduct(p)}>Изменить</button><button disabled={pending} onClick={()=>void toggleProductVisibility(p)}>{p.active?"Скрыть":"Показать"}</button></div></td>
             </tr>)}</tbody></table></div>
             {visible.length===0&&<p className="admin-help">Товары не найдены.</p>}
           </div>

@@ -206,3 +206,13 @@
 .product-detail-checkout{text-align:center;font-weight:800;color:#2565ff;font-size:12px}
 @media(max-width:900px){.buyer-layout{grid-template-columns:1fr}.checkout-side{order:2}}
 @media(max-width:600px){.buyer-heading h1{font-size:27px}.buyer-panel{padding:17px}.buyer-page{padding-top:22px}.checkout-line{flex-wrap:wrap}.checkout-line>strong{margin-left:auto}.admin-order-content{grid-template-columns:1fr;gap:5px}.buyer-order-head{align-items:start;flex-direction:column}}
+
+/* Product preview link in admin table */
+.admin-product-name .admin-product-link{display:flex;align-items:center;gap:12px;color:inherit;text-decoration:none;min-width:0}
+.admin-product-name .admin-product-link img,.admin-product-name .admin-product-icon{width:48px;height:48px;flex:none;object-fit:cover;border-radius:9px;background:#f2f5fa}
+.admin-product-name .admin-product-icon{display:grid;place-items:center;font-size:21px}
+.admin-product-name .admin-product-meta{display:flex;flex-direction:column;gap:6px;min-width:0}
+.admin-product-name .admin-product-meta small{color:#9ba5b9;font-size:11px}
+.admin-product-name a.admin-product-link:hover strong{color:#2565ff;text-decoration:underline}
+.admin-product-name a.admin-product-link:focus-visible{outline:2px solid #2565ff;outline-offset:4px;border-radius:4px}
+.admin-product-name .admin-product-hidden{cursor:default}
