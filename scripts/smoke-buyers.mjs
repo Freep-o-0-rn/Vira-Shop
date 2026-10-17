@@ -25,6 +25,17 @@ const signup=async prefix=>{
  assert.ok(r.cookie?.includes("vira_customer_session="));return {email,cookie:r.cookie};
 };
 const a=await signup("a"),b=await signup("b");
+const shortEmail="buyer_short_"+randomUUID().slice(0,8)+"@example.test";
+const shortPassword="Ab12xy"; // Six characters, accepted for local customer accounts.
+const shortUser=await call("/api/account/register",{method:"POST",status:201,
+ body:{email:shortEmail,name:"Short Password Tester",password:shortPassword}});
+assert.ok(shortUser.cookie?.includes("vira_customer_session="));
+const shortLogin=await call("/api/account/session",{method:"POST",
+ body:{email:shortEmail,password:shortPassword}});
+assert.ok(shortLogin.cookie?.includes("vira_customer_session="));
+await call("/api/account/register",{method:"POST",status:400,
+ body:{email:"buyer_too_short_"+randomUUID().slice(0,8)+"@example.test",name:"Test",password:"Ab123"}});
+
 await call("/api/account/register",{method:"POST",status:409,body:{email:a.email,name:"Another",password:pass}});
 await call("/api/account/cart",{status:401});
 await call("/api/account/orders",{status:401});

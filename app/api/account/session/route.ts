@@ -13,7 +13,7 @@ export async function POST(req:NextRequest){
  try{input=object(await jsonBody(req));}catch{return bad("Некорректный запрос.");}
  if(!input)return bad("Передайте логин и пароль.");
  const email=typeof input.email==="string"?input.email.trim().toLowerCase():"";
- if(!emailValid(email)||!passwordValid(input.password))return bad("Укажите корректный email и пароль от 12 символов.");
+ if(!emailValid(email)||!passwordValid(input.password))return bad("Укажите корректный email и пароль от 6 символов.");
  const client=await getPool().connect().catch(()=>null);
  if(!client)return bad("База данных недоступна.",503);
  try{

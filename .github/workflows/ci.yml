@@ -28,6 +28,8 @@ jobs:
       - run: npm run db:seed
       - run: npm run db:seed
       - run: npm run admin:create
+      - name: Verify administrator password reset does not alter the database
+        run: npm run admin:create
       - run: npm run typecheck
       - run: npm run build
       - name: API integration tests (embedded local DB)

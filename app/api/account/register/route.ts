@@ -10,7 +10,7 @@ export async function POST(req:NextRequest){
  const email=typeof b.email==="string"?b.email.trim().toLowerCase():"";
  const name=typeof b.name==="string"?b.name.trim():"";
  if(!emailValid(email)||name.length<2||name.length>120||!passwordValid(b.password))
-  return bad("Введите имя (2–120 символов), email и пароль от 12 символов.");
+  return bad("Введите имя (2–120 символов), email и пароль от 6 символов.");
  try{
   const hash=await hashPassword(b.password);
   const res=await getPool().query<{id:string}>(

@@ -86,7 +86,7 @@ export default function AccountPortal(){
     <form onSubmit={e=>void submit(e)} className="buyer-form">
      {tab==="register"&&<label>Имя<input required minLength={2} maxLength={120} autoComplete="name" value={name} onChange={e=>setName(e.target.value)}/></label>}
      <label>Email<input required type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)}/></label>
-     <label>Пароль (от 12 символов)<input required type="password" minLength={12} maxLength={256} autoComplete={tab==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)}/></label>
+     <label>Пароль (от 6 символов)<input required type="password" minLength={6} maxLength={256} autoComplete={tab==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)}/></label>
      <button type="submit" disabled={busy} className="buyer-primary">{busy?"Обработка…":tab==="register"?"Зарегистрироваться":"Войти"}</button>
     </form>
    </section>:

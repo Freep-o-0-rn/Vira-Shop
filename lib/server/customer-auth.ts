@@ -56,7 +56,7 @@ export function emailValid(value:unknown):value is string {
  return typeof value==="string" && value.length<=254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 export function passwordValid(value:unknown):value is string{
- return typeof value==="string"&&value.length>=12&&value.length<=256;
+ return typeof value==="string"&&value.length>=6&&value.length<=256;
 }
 export async function jsonBody(req:Request,maxBytes=12000):Promise<unknown>{
  const length=Number(req.headers.get("content-length")||0);

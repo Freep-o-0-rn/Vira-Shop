@@ -25,7 +25,7 @@ export default function AdminLogin() {
       <a href="/" className="admin-login-brand"><span>v.</span> vira shop</a>
       <p className="admin-eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</p>
       <h1>Вход администратора</h1>
-      <p className="admin-help">Логин и пароль создаются через CREATE-ADMIN-WINDOWS.bat после настройки PostgreSQL.</p>
+      <p className="admin-help">Логин администратора — не email. Если пароль не подходит, остановите сайт и повторно запустите CREATE-ADMIN-WINDOWS.bat с тем же логином.</p>
       {error && <p className="admin-alert" role="alert">{error}</p>}
       <label>Логин <input autoComplete="username" required value={login} maxLength={64} onChange={e=>setLogin(e.target.value)}/></label>
       <label>Пароль <input type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)}/></label>
