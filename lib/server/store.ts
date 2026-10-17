@@ -140,6 +140,8 @@ export async function listProducts(filters: ProductFilters): Promise<ProductList
   const {fromWhere,values}=buildProductWhere({
     search,category,sort,limit,page,minPrice,maxPrice,inStock,specs
   });
+  const limitParameter="$"+String(values.length+1);
+  const offsetParameter="$"+String(values.length+2);
   const client = await getPool().connect();
   try {
     // Same snapshot for the count and page, even if another administrator changes the catalog.
@@ -147,7 +149,7 @@ export async function listProducts(filters: ProductFilters): Promise<ProductList
     const count = await client.query<{ total: string }>(`SELECT COUNT(*)::text AS total ${fromWhere}`,values);
     const total = Number(count.rows[0].total);
     const results = await client.query<Row>(
-      `SELECT ${columns} ${fromWhere} ORDER BY ${orderBy[sort]} LIMIT ${values.length+1} OFFSET ${values.length+2}`,
+      `SELECT ${columns} ${fromWhere} ORDER BY ${orderBy[sort]} LIMIT ${limitParameter} OFFSET ${offsetParameter}`,
       [...values,limit,(page-1)*limit]
     );
     await client.query("COMMIT");
