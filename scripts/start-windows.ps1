@@ -7,6 +7,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $logPath = Join-Path $projectRoot "vira-startup.log"
 $transcriptStarted = $false
 $exitCode = 0
+$runtimeLock = $null
 
 try {
     Set-Location -LiteralPath $projectRoot
@@ -40,6 +41,22 @@ try {
         Write-Host "Windows launcher preflight: OK." -ForegroundColor Green
     }
     else {
+        # Only one local server may operate on this embedded PGlite database.
+        $lockPath = Join-Path $projectRoot ".vira-running.lock"
+        try {
+            $runtimeLock = [System.IO.File]::Open($lockPath, [System.IO.FileMode]::OpenOrCreate,
+                [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+        }
+        catch {
+            throw "Vira Shop already seems to be running from this folder. Close the existing server before starting another."
+        }
+        # Never silently start at :3001 when a different folder already owns :3000.
+        $probe = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 3000)
+        try { $probe.Start(); $probe.Stop() }
+        catch {
+            try { $probe.Stop() } catch {}
+            throw "Port 3000 is already occupied. Close the old Vira Shop window before starting this one."
+        }
         $nextPackage = Join-Path $projectRoot "node_modules\next\package.json"
         $manifest = Join-Path $projectRoot "package.json"
         $hashStamp = Join-Path $projectRoot ".vira-deps.hash"
@@ -66,7 +83,7 @@ try {
         Write-Host ""
         Write-Host "Starting Vira Shop: http://localhost:3000" -ForegroundColor Green
         Write-Host "Do not close this window while using the site."
-        Write-Host "If port 3000 is busy, Next.js may display a different port."
+        Write-Host "The launcher prevents starting when port 3000 is already busy."
         Write-Host "Press Ctrl+C to stop the server."
         Write-Host ""
         & npm.cmd run dev -- --port 3000
@@ -84,6 +101,7 @@ catch {
     $exitCode = 1
 }
 finally {
+    if ($null -ne $runtimeLock) { $runtimeLock.Dispose() }
     if ($transcriptStarted) {
         Stop-Transcript | Out-Null
     }

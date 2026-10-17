@@ -36,3 +36,8 @@ public/uploads/
 
 # Embedded local database and user data: never publish or overwrite
 /data/
+
+# Runtime lock and local backup files
+.vira-running.lock
+/backups/
+.vira-transfer-*/
