@@ -3,6 +3,7 @@ import {useEffect,useState} from "react";
 import type {Product} from "@/lib/catalog";
 import type {VariantGroup,StoreVariant} from "@/lib/variants";
 import {rub} from "@/lib/catalog";
+import {chooseVariant,optionAvailability} from "@/lib/variant-selection";
 
 const CART_KEY="vira-shop:cart:v1";
 const VARIANT_KEY="vira-shop:variant-cart:v1";
@@ -35,6 +36,13 @@ export default function ProductGalleryAndCart({product,variantData}:{product:Pro
  const [quantity,setQuantity]=useState(0);
  const [liked,setLiked]=useState(false);
  const [notice,setNotice]=useState("");
+ useEffect(()=>{
+  if(!hasVariants)return;
+  const sku=new URLSearchParams(window.location.search).get("sku");
+  const saved=variants.find(v=>v.active&&v.article===sku);
+  if(saved){setChosen(saved);setActiveImage(0);}
+ // On product navigation a new component is mounted for each page.
+ },[product.id]);
  const images=(chosen?.images.length?chosen.images:(product.images?.length?product.images:[product.image])).filter(Boolean);
  const stock=hasVariants?(chosen?.stock??0):(product.stock??0);
  const price=hasVariants&&chosen?Number(chosen.priceMinor)/100:product.price;
@@ -45,16 +53,19 @@ export default function ProductGalleryAndCart({product,variantData}:{product:Pro
   setLiked(favorites().includes(product.id));
  },[article,hasVariants,product.id]);
  function select(groupIndex:number,label:string){
-  const group=variantData.groups[groupIndex];
-  const candidates=variants.filter(v=>v.active&&v.selection[groupIndex]?.name===group.name&&v.selection[groupIndex]?.value===label);
-  if(!candidates.length)return;
-  const otherSelections=chosen?.selection??[];
-  // Prefer retaining every other selected group, then fall back to the nearest valid combination.
-  const best=[...candidates].sort((a,b)=>{
-   const score=(v:StoreVariant)=>v.selection.reduce((total,x,i)=>total+(i!==groupIndex&&x.value===otherSelections[i]?.value?1:0),0);
-   return score(b)-score(a)||(b.stock>0?1:0)-(a.stock>0?1:0);
-  })[0];
-  setChosen(best);setActiveImage(0);setNotice("");
+  const next=chooseVariant(variants,chosen,groupIndex,label);
+  if(!next)return;
+  setChosen(next);setActiveImage(0);setNotice("");
+  const url=new URL(window.location.href);
+  url.searchParams.set("sku",next.article);
+  window.history.replaceState(window.history.state,"",url.pathname+url.search+url.hash);
+ }
+ async function copyVariantLink(){
+  if(!chosen)return;
+  const url=new URL(window.location.href);
+  url.searchParams.set("sku",chosen.article);
+  try{await navigator.clipboard.writeText(url.toString());setNotice("Ссылка на выбранный вариант скопирована.");}
+  catch{setNotice("Не удалось скопировать ссылку в этом браузере.");}
  }
  function add(){
   if(hasVariants&&!chosen){setNotice("Выберите доступную комбинацию.");return;}
@@ -102,18 +113,31 @@ export default function ProductGalleryAndCart({product,variantData}:{product:Pro
         <span>{chosen?.selection[i]?.value??"Выберите"}</span></legend>
        <div className="product-variant-options">{group.values.map(value=>{
         const selected=chosen?.selection[i]?.value===value.label;
-        const exists=variants.some(v=>v.active&&v.selection[i]?.name===group.name&&v.selection[i]?.value===value.label);
-        return <button key={value.label} type="button" disabled={!exists}
-          aria-pressed={selected} title={exists?value.label:"Комбинация недоступна"}
+        const availability=optionAvailability(variants,chosen,group,i,value.label);
+        const unavailable=availability==="unavailable";
+        const label=availability==="sold-out"?"Нет в наличии":
+          availability==="changes-other-options"?"При выборе изменятся другие параметры":
+          unavailable?"Комбинация недоступна":value.label;
+        return <button key={value.label} type="button" disabled={unavailable}
+          aria-pressed={selected} aria-label={value.label+": "+label}
+          title={label} data-availability={availability}
           className={"product-variant-option "+group.type+(selected?" selected":"")}
           onClick={()=>select(i,value.label)}>
           {group.type==="color"&&<span className="product-variant-dot" style={{backgroundColor:value.color??"#cccccc"}}/>}
           {group.type==="image"&&value.image&&<img src={value.image} alt=""/>}
           <span>{value.label}</span>
+          {availability==="sold-out"&&<small aria-hidden="true">Нет</small>}
+          {availability==="changes-other-options"&&<small aria-hidden="true">↗</small>}
         </button>;
        })}</div>
      </fieldset>)}
-     <p className="product-variant-article">Артикул: {chosen?.article??"Нет активной комбинации"}</p>
+     <div className="product-variant-meta">
+       <p className="product-variant-article">Артикул: {chosen?.article??"Нет активной комбинации"}</p>
+       {chosen&&<button type="button" className="product-variant-copy" onClick={()=>void copyVariantLink()}>
+         Скопировать ссылку на вариант ↗
+       </button>}
+     </div>
+     <p className="product-variant-hint">↗ — при выборе этого параметра другие параметры могут измениться автоматически.</p>
    </div>}
    <div className="product-detail-prices"><strong>{hasVariants&&!chosen?"—":rub(price)}</strong>
      {oldPrice!==undefined&&<s>{rub(oldPrice)}</s>}</div>

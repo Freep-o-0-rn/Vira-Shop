@@ -377,3 +377,33 @@
 .product-variant-option.image img{width:42px;height:42px;border-radius:6px;object-fit:cover}
 .product-variant-article{font-size:11px;color:#90a0b7;margin:12px 0 0}
 @media(max-width:620px){.variant-inline{grid-template-columns:1fr}.variant-group-editor{padding:12px}.variant-value-row{flex-wrap:wrap}.variant-admin-modal{width:100%}.product-variant-option{font-size:11px}}
+
+
+/* Vira Shop 0.12 — variant UX */
+.variant-template-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:16px 0}
+.variant-template-row span{font-size:11px;color:#657895;font-weight:800;margin-right:5px}
+.variant-template-row button{border:1px solid #cedefa;background:#f5f8ff;color:#255ccd;border-radius:8px;padding:8px 10px;font-size:11px;font-weight:750}
+.variant-template-row button:disabled{opacity:.35;cursor:not-allowed}
+.variant-bulk-panel{border:1px solid #cddcf7;background:#f6f9ff;border-radius:13px;padding:14px;margin:14px 0;display:flex;flex-direction:column;gap:10px}
+.variant-bulk-panel>strong{font-size:12px;color:#2d4169}
+.variant-bulk-fields{display:flex;flex-wrap:wrap;align-items:end;gap:9px}
+.variant-bulk-fields label{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:750;color:#5c7194;flex:1;min-width:135px}
+.variant-bulk-fields input{border:1px solid #cfdcf2;background:#fff;border-radius:8px;padding:10px;width:100%;min-width:0;color:#293a58}
+.variant-bulk-fields>button{border:0;border-radius:9px;background:#2867e8;color:#fff;font-size:12px;font-weight:750;padding:11px 16px;min-height:38px}
+.variant-bulk-actions{display:flex;gap:7px;flex-wrap:wrap}
+.variant-bulk-actions button{border:1px solid #d8e4f7;background:#fff;border-radius:8px;color:#335a9e;font-size:11px;padding:8px 11px}
+.variant-bulk-panel button:disabled{opacity:.38;cursor:not-allowed}
+.variant-filter-label{display:flex;flex-direction:column;gap:5px;margin:15px 0;font-size:12px;font-weight:750;color:#526784}
+.variant-filter-label input{border:1px solid #d8e4f4;background:#fff;padding:10px 12px;border-radius:9px;font-size:12px;max-width:390px}
+.variant-table td input[type=checkbox],.variant-table th input[type=checkbox]{width:17px;height:17px;cursor:pointer;accent-color:#2b63e7}
+.variant-table td:first-child{width:32px}
+.variant-table td input[type=number]{max-width:115px}
+.product-variant-option[data-availability="sold-out"]:not(.selected){background:#f8f9fc;border-style:dashed;color:#8995a6}
+.product-variant-option[data-availability="changes-other-options"]:not(.selected){border-style:dashed}
+.product-variant-option small{font-size:10px;opacity:.8;white-space:nowrap}
+.product-variant-option[data-availability="unavailable"]{opacity:.28}
+.product-variant-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px}
+.product-variant-meta .product-variant-article{margin:0}
+.product-variant-copy{border:0;background:transparent;padding:4px;color:#3268d2;font-size:11px;font-weight:750;text-decoration:underline;text-underline-offset:3px}
+.product-variant-hint{font-size:11px;line-height:1.5;color:#8996aa;margin:7px 0 0}
+@media(max-width:640px){.variant-bulk-fields{align-items:stretch}.variant-bulk-fields>button{width:100%}.variant-template-row span{width:100%}.product-variant-meta{align-items:flex-start;flex-direction:column;gap:4px}}
