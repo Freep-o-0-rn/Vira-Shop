@@ -17,9 +17,18 @@ export async function GET(req:NextRequest){
   if(page<1||limit<1||limit>100)return NextResponse.json({error:"Неверный номер страницы или лимит."},{status:400});
   const params:unknown[]=[],where:string[]=[];
   if(q){
+    if(/^[0-9]+$/.test(q)){
+      params.push(q);
+      where.push("o.id::text=$"+params.length);
+    }else{
+      params.push("%"+q.replace(/[\\%_]/g,"\\  if(q){
     params.push("%"+q.replace(/[\\%_]/g,"\\$&")+"%");
     const p="$"+params.length;
     where.push(`(o.id::text ILIKE ${p} ESCAPE '\\' OR c.name ILIKE ${p} ESCAPE '\\' OR c.email ILIKE ${p} ESCAPE '\\')`);
+  }")+"%");
+      const p="$"+params.length;
+      where.push(`(c.name ILIKE ${p} ESCAPE '\\' OR c.email ILIKE ${p} ESCAPE '\\')`);
+    }
   }
   if(status!=="all"){params.push(status);where.push("o.status=$"+params.length);}
   const condition=where.length?" WHERE "+where.join(" AND "):"";
