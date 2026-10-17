@@ -13,8 +13,8 @@ export async function GET(request: NextRequest) {
     if (denied) return denied;
     const result = await getPool().query(
       `SELECT p.id, p.title, p.subtitle, p.description, p.category_id AS category,
-              (p.price_minor / 100.0)::text AS price,
-              CASE WHEN p.old_price_minor IS NULL THEN NULL ELSE (p.old_price_minor / 100.0)::text END AS "oldPrice",
+              ROUND(p.price_minor::numeric / 100, 2)::text AS price,
+              CASE WHEN p.old_price_minor IS NULL THEN NULL ELSE ROUND(p.old_price_minor::numeric / 100, 2)::text END AS "oldPrice",
               p.image_url AS image, p.badge, p.stock_count AS stock, p.is_active AS active,
               p.created_at AS "createdAt"
          FROM shop_products p ORDER BY p.created_at DESC, p.id ASC LIMIT 1000`

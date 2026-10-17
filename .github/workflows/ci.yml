@@ -31,6 +31,7 @@ jobs:
       DATABASE_URL: postgresql://vira_dev:vira_dev_only_change_me@127.0.0.1:5432/vira_shop
       VIRA_ADMIN_LOGIN: testadmin
       VIRA_ADMIN_PASSWORD: test-only-strong-password-123
+      APP_ORIGIN: http://127.0.0.1:3000
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

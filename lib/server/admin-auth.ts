@@ -79,9 +79,19 @@ export async function revokeSession(token: string | undefined): Promise<void> {
 export function validOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (!origin) return false;
-  const expected = process.env.APP_ORIGIN?.trim() || new URL(request.url).origin;
-  try { return new URL(origin).origin === expected && origin === new URL(origin).origin; }
-  catch { return false; }
+  try {
+    const supplied = new URL(origin);
+    if (supplied.origin !== origin || !["http:", "https:"].includes(supplied.protocol)) return false;
+    const configuredOrigin = process.env.APP_ORIGIN?.trim();
+    if (configuredOrigin) {
+      const expected = new URL(configuredOrigin);
+      return configuredOrigin === expected.origin && origin === expected.origin;
+    }
+    // Without a configured public origin, only allow local development.
+    if (process.env.NODE_ENV === "production") return false;
+    const host = request.headers.get("host");
+    return Boolean(host) && (origin === "http://" + host || origin === "https://" + host);
+  } catch { return false; }
 }
 
 export function denyCrossOrigin(request: Request): NextResponse | null {

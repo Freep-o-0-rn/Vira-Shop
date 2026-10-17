@@ -76,6 +76,7 @@ export async function listProducts(filters: ProductFilters): Promise<ProductList
             p.rating::text, p.reviews, p.image_url, p.badge, p.description, p.stock_count,
             COUNT(*) OVER ()::text AS full_count
        FROM shop_products p
+       JOIN shop_categories c ON c.id=p.category_id AND c.is_active=TRUE
       WHERE p.is_active = TRUE
         AND ($1::text = '' OR p.category_id = $1)
         AND ($2::text = '' OR p.title ILIKE ('%' || $2 || '%') OR p.subtitle ILIKE ('%' || $2 || '%'))
