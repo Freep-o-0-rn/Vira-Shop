@@ -39,6 +39,11 @@ assert.equal(new Set(editor.variants.map(x=>x.article)).size,4);
 const storefront=(await api("/api/products/"+prod+"/variants")).data;
 assert.equal(storefront.variants.length,3); // fourth combination is hidden
 assert.equal((await api("/api/products/"+prod)).data.item.hasVariants,true);
+const summary=(await api("/api/products?category=electronics&q=CI%20%D0%A8%D0%BF%D0%B0%D0%B3%D0%B0%D1%82")).data;
+assert.equal(summary.total,1);
+assert.equal(summary.items[0].price,100);
+assert.equal(summary.items[0].stock,3);
+assert.equal((await api("/api/products?category=electronics&q=CI%20%D0%A8%D0%BF%D0%B0%D0%B3%D0%B0%D1%82&minPrice=101")).data.total,0);
 const art=(color,len)=>editor.variants.find(v=>v.selection[0].value===color&&v.selection[1].value===len).article;
 const red20=art("Красный","20 м"),red50=art("Красный","50 м"),blue50=art("Синий","50 м");
 const customer=await api("/api/account/register",{method:"POST",status:201,body:{

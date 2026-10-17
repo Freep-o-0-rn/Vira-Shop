@@ -11,10 +11,14 @@ export type ProductList = {
   items: Product[]; total: number; page: number; limit: number;
   totalPages: number; source: "demo" | "database";
 };
+const activeVariantMin = "(SELECT MIN(x.price_minor) FROM shop_product_variants x WHERE x.product_id=p.id AND x.is_active=TRUE)";
+const activeVariantStock = "(SELECT COALESCE(SUM(x.stock_count),0)::int FROM shop_product_variants x WHERE x.product_id=p.id AND x.is_active=TRUE)";
+const effectivePrice = "(CASE WHEN p.variant_groups <> '[]'::jsonb THEN COALESCE("+activeVariantMin+",p.price_minor) ELSE p.price_minor END)";
+const effectiveStock = "(CASE WHEN p.variant_groups <> '[]'::jsonb THEN "+activeVariantStock+" ELSE p.stock_count END)";
 const orderBy: Record<SortOrder, string> = {
   popular: "p.reviews DESC, p.rating DESC, p.id ASC",
-  cheap: "p.price_minor ASC, p.id ASC",
-  expensive: "p.price_minor DESC, p.id ASC",
+  cheap: effectivePrice+" ASC, p.id ASC",
+  expensive: effectivePrice+" DESC, p.id ASC",
   rating: "p.rating DESC, p.reviews DESC, p.id ASC",
 };
 type Row = {
@@ -24,8 +28,12 @@ type Row = {
   description: string; stock_count: number; images: string[] | null; specs: ProductSpec[] | null; has_variants: boolean;
 };
 const columns = `p.id, p.title, p.subtitle, p.category_id AS category,
- p.price_minor::text, p.old_price_minor::text, p.rating::text, p.reviews,
- p.image_url, p.badge, p.description, p.stock_count, p.images, p.specs,
+ ${effectivePrice}::text AS price_minor,
+ (CASE WHEN p.variant_groups <> '[]'::jsonb THEN
+    (SELECT x.old_price_minor FROM shop_product_variants x WHERE x.product_id=p.id AND x.is_active=TRUE ORDER BY x.price_minor,x.article LIMIT 1)
+    ELSE p.old_price_minor END)::text AS old_price_minor,
+ p.rating::text, p.reviews,
+ p.image_url, p.badge, p.description, ${effectiveStock} AS stock_count, p.images, p.specs,
  (p.variant_groups <> '[]'::jsonb) AS has_variants`;
 
 function mapProduct(row: Row): Product {
@@ -65,9 +73,9 @@ function buildProductWhere(filters:ProductFilters,includeSpecs=true){
          OR EXISTS(SELECT 1 FROM jsonb_array_elements(p.specs) AS kv(item)
            WHERE position(lower($2::text) in lower(coalesce(kv.item->>'name','')))>0
               OR position(lower($2::text) in lower(coalesce(kv.item->>'value','')))>0))
-      AND ($3::bigint IS NULL OR p.price_minor >= $3)
-      AND ($4::bigint IS NULL OR p.price_minor <= $4)
-      AND (NOT $5::boolean OR p.stock_count > 0)`;
+      AND ($3::bigint IS NULL OR ${effectivePrice} >= $3)
+      AND ($4::bigint IS NULL OR ${effectivePrice} <= $4)
+      AND (NOT $5::boolean OR ${effectiveStock} > 0)`;
   if(includeSpecs){
     for(const spec of filters.specs??[]){
       const pName=values.length+1;
