@@ -33,9 +33,12 @@ jobs:
       - name: API integration tests (embedded local DB)
         run: |
           npm run start -- --port 3000 > /tmp/vira-server.log 2>&1 &
-          node scripts/smoke-admin.mjs || (cat /tmp/vira-server.log && exit 1)
-          node scripts/smoke-catalog.mjs || (cat /tmp/vira-server.log && exit 1)
-          node scripts/smoke-buyers.mjs || (cat /tmp/vira-server.log && exit 1)
+          echo "Testing admin API"
+          timeout 110s node scripts/smoke-admin.mjs || (cat /tmp/vira-server.log && exit 1)
+          echo "Testing catalog API"
+          timeout 190s node scripts/smoke-catalog.mjs || (cat /tmp/vira-server.log && exit 1)
+          echo "Testing customer order API"
+          timeout 120s node scripts/smoke-buyers.mjs || (cat /tmp/vira-server.log && exit 1)
 
   windows-launcher:
     runs-on: windows-latest

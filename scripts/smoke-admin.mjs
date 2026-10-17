@@ -3,7 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 const base = "http://127.0.0.1:3000";
 let ready=false;
 for(let i=0;i<50;i++){
- try{const r=await fetch(base+"/api/products");if(r.ok){ready=true;break;}}catch{}
+ try{const r=await fetch(base+"/api/products",{signal:AbortSignal.timeout(3000)});if(r.ok){ready=true;break;}}catch{}
  await delay(1000);
 }
 assert.ok(ready,"Next.js did not start");
@@ -12,7 +12,7 @@ async function check(path, {status=200,method="GET",body,cookie,origin=base}={})
  if(method!=="GET")headers.Origin=origin;
  if(cookie)headers.Cookie=cookie;
  if(body!==undefined)headers["Content-Type"]="application/json";
- const res=await fetch(base+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
+ const res=await fetch(base+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
  const data=await res.json();
  assert.equal(res.status,status,`${method} ${path} -> ${JSON.stringify(data)}`);
  return {data,cookie:res.headers.get("set-cookie")};
