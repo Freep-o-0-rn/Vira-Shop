@@ -1,3 +1,24 @@
+import type { ProductSpec } from "@/lib/catalog";
+export const MAX_SPEC_FILTERS=8;
+export function parseSpecFilters(raw: string[]): ProductSpec[] | null {
+  if(raw.length>MAX_SPEC_FILTERS)return null;
+  const values:ProductSpec[]=[];
+  const keys=new Set<string>();
+  for(const text of raw){
+    if(text.length>500)return null;
+    let pair:unknown;
+    try{pair=JSON.parse(text);}catch{return null;}
+    if(!Array.isArray(pair)||pair.length!==2||typeof pair[0]!=="string"||typeof pair[1]!=="string")return null;
+    const name=pair[0].trim(),value=pair[1].trim();
+    if(!name||!value||name.length>80||value.length>200)return null;
+    const key=(name+"\u0000"+value).toLocaleLowerCase("ru");
+    if(!keys.has(key)){keys.add(key);values.push({name,value});}
+  }
+  return values;
+}
+export function specFilterKey(spec:ProductSpec):string{
+  return (spec.name+"\u0000"+spec.value).toLocaleLowerCase("ru");
+}
 /**
  * Browser address model for the storefront catalog.
  * Keep this module free of browser and framework dependencies so it can be
@@ -13,10 +34,11 @@ export type CatalogRoute = {
   minPrice: string;
   maxPrice: string;
   inStock: boolean;
+  specs: ProductSpec[];
 };
 export const defaultCatalogRoute: CatalogRoute = {
   q: "", category: "", sort: "popular", page: 1,
-  minPrice: "", maxPrice: "", inStock: false,
+  minPrice: "", maxPrice: "", inStock: false, specs: [],
 };
 const priceValid = (v: string) => /^\d{1,9}(\.\d{1,2})?$/.test(v);
 const sortValues: CatalogOrder[] = ["popular", "cheap", "expensive", "rating"];
@@ -45,7 +67,7 @@ export function parseCatalogRoute(search: string): CatalogRoute {
   if (minPrice && maxPrice && Number(minPrice) > Number(maxPrice)) {
     minPrice = ""; maxPrice = "";
   }
-  return {q, category, sort, page, minPrice, maxPrice, inStock:p.get("inStock")==="true"};
+  return {q, category, sort, page, minPrice, maxPrice, inStock:p.get("inStock")==="true",specs:parseSpecFilters(p.getAll("spec"))??[]};
 }
 
 export function catalogHref(route: CatalogRoute): string {
@@ -56,6 +78,7 @@ export function catalogHref(route: CatalogRoute): string {
   if (route.minPrice) p.set("minPrice",route.minPrice);
   if (route.maxPrice) p.set("maxPrice",route.maxPrice);
   if (route.inStock) p.set("inStock","true");
+  for(const spec of route.specs)p.append("spec",JSON.stringify([spec.name,spec.value]));
   if (route.page > 1) p.set("page",String(route.page));
   const query = p.toString();
   return "/catalog" + (query ? "?"+query : "");

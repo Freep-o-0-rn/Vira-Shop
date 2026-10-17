@@ -5,6 +5,7 @@ export type SortOrder = "popular" | "cheap" | "expensive" | "rating";
 export type ProductFilters = {
   search: string; category: string; sort: SortOrder; page: number; limit: number;
   minPrice: number | null; maxPrice: number | null; inStock: boolean;
+  specs?: ProductSpec[];
 };
 export type ProductList = {
   items: Product[]; total: number; page: number; limit: number;
@@ -44,12 +45,87 @@ function demoProduct(p: Product): Product {
 }
 const demo = demoProducts.map(demoProduct);
 
+type FacetGroup={name:string;values:{value:string;count:number}[]};
+export type CatalogFacets={groups:FacetGroup[];source:"demo"|"database"};
+function buildProductWhere(filters:ProductFilters,includeSpecs=true){
+  const values:unknown[]=[
+    filters.category,filters.search,
+    filters.minPrice===null?null:Math.round(filters.minPrice*100),
+    filters.maxPrice===null?null:Math.round(filters.maxPrice*100),
+    filters.inStock,
+  ];
+  let fromWhere=`FROM shop_products p
+    JOIN shop_categories c ON c.id=p.category_id AND c.is_active=TRUE
+    WHERE p.is_active=TRUE
+      AND ($1::text='' OR p.category_id=$1)
+      AND ($2::text='' OR position(lower($2::text) in lower(p.title))>0
+         OR position(lower($2::text) in lower(p.subtitle))>0
+         OR position(lower($2::text) in lower(p.description))>0
+         OR EXISTS(SELECT 1 FROM jsonb_array_elements(p.specs) AS kv(item)
+           WHERE position(lower($2::text) in lower(coalesce(kv.item->>'name','')))>0
+              OR position(lower($2::text) in lower(coalesce(kv.item->>'value','')))>0))
+      AND ($3::bigint IS NULL OR p.price_minor >= $3)
+      AND ($4::bigint IS NULL OR p.price_minor <= $4)
+      AND (NOT $5::boolean OR p.stock_count > 0)`;
+  if(includeSpecs){
+    for(const spec of filters.specs??[]){
+      const pName=values.length+1;
+      const pValue=pName+1;
+      fromWhere+=` AND EXISTS(SELECT 1 FROM jsonb_array_elements(p.specs) AS chosen(item)
+        WHERE lower(chosen.item->>'name')=lower($${pName}::text)
+          AND lower(chosen.item->>'value')=lower($${pValue}::text))`;
+      values.push(spec.name,spec.value);
+    }
+  }
+  return {fromWhere,values};
+}
+
+export async function listProductFacets(filters:ProductFilters):Promise<CatalogFacets>{
+  if(!databaseEnabled()){
+    const q=filters.search.toLocaleLowerCase("ru");
+    const products=demo.filter(p=>(!filters.category||p.category===filters.category)
+      &&(!q||(p.title+" "+p.subtitle+" "+p.description+" "+(p.specs??[]).map(s=>s.name+" "+s.value).join(" ")).toLocaleLowerCase("ru").includes(q))
+      &&(filters.minPrice===null||p.price>=filters.minPrice)
+      &&(filters.maxPrice===null||p.price<=filters.maxPrice)
+      &&(!filters.inStock||(p.stock??20)>0));
+    const groups=new Map<string,Map<string,number>>();
+    for(const product of products)for(const spec of product.specs??[]){
+      if(!groups.has(spec.name))groups.set(spec.name,new Map());
+      const group=groups.get(spec.name)!;
+      group.set(spec.value,(group.get(spec.value)||0)+1);
+    }
+    return {groups:[...groups].slice(0,12).map(([name,values])=>({
+      name,values:[...values].slice(0,15).map(([value,count])=>({value,count}))
+    })),source:"demo"};
+  }
+  // Facet counts intentionally ignore selected specification filters.
+  // This keeps alternatives selectable even when another value is selected.
+  const {fromWhere,values}=buildProductWhere(filters,false);
+  const result=await getPool().query<{name:string;value:string;count:number}>(`
+    SELECT sp.item->>'name' AS name,sp.item->>'value' AS value,
+      COUNT(DISTINCT matched.id)::int AS count
+    FROM (SELECT p.id,p.specs ${fromWhere}) AS matched
+    CROSS JOIN LATERAL jsonb_array_elements(matched.specs) AS sp(item)
+    GROUP BY 1,2 ORDER BY 1, count DESC, 2`,values);
+  const groups=new Map<string,FacetGroup>();
+  for(const item of result.rows){
+    if(!item.name||!item.value)continue;
+    if(!groups.has(item.name)){
+      if(groups.size>=12)continue;
+      groups.set(item.name,{name:item.name,values:[]});
+    }
+    const group=groups.get(item.name)!;
+    if(group.values.length<15)group.values.push({value:item.value,count:Number(item.count)});
+  }
+  return {groups:[...groups.values()],source:"database"};
+}
 export async function listProducts(filters: ProductFilters): Promise<ProductList> {
-  const { search, category, sort, limit, page, minPrice, maxPrice, inStock } = filters;
+  const { search, category, sort, limit, page, minPrice, maxPrice, inStock, specs=[] } = filters;
   if (!databaseEnabled()) {
     const q = search.toLocaleLowerCase("ru");
     let entries = demo.filter(p => (!category || p.category === category) &&
-      (!q || (p.title+" "+p.subtitle).toLocaleLowerCase("ru").includes(q)) &&
+      (!q || (p.title+" "+p.subtitle+" "+p.description+" "+(p.specs??[]).map(s=>s.name+" "+s.value).join(" ")).toLocaleLowerCase("ru").includes(q)) &&
+      specs.every(filter=>(p.specs??[]).some(s=>s.name.toLocaleLowerCase("ru")===filter.name.toLocaleLowerCase("ru") && s.value.toLocaleLowerCase("ru")===filter.value.toLocaleLowerCase("ru"))) &&
       (minPrice === null || p.price >= minPrice) &&
       (maxPrice === null || p.price <= maxPrice) &&
       (!inStock || (p.stock ?? 20) > 0));
@@ -61,20 +137,9 @@ export async function listProducts(filters: ProductFilters): Promise<ProductList
       totalPages: Math.ceil(entries.length/limit), source: "demo"
     };
   }
-  const values = [
-    category, search,
-    minPrice === null ? null : Math.round(minPrice*100),
-    maxPrice === null ? null : Math.round(maxPrice*100),
-    inStock,
-  ];
-  const fromWhere = `FROM shop_products p
-    JOIN shop_categories c ON c.id=p.category_id AND c.is_active=TRUE
-    WHERE p.is_active=TRUE
-      AND ($1::text='' OR p.category_id=$1)
-      AND ($2::text='' OR p.title ILIKE ('%' || $2 || '%') OR p.subtitle ILIKE ('%' || $2 || '%'))
-      AND ($3::bigint IS NULL OR p.price_minor >= $3)
-      AND ($4::bigint IS NULL OR p.price_minor <= $4)
-      AND (NOT $5::boolean OR p.stock_count > 0)`;
+  const {fromWhere,values}=buildProductWhere({
+    search,category,sort,limit,page,minPrice,maxPrice,inStock,specs
+  });
   const client = await getPool().connect();
   try {
     // Same snapshot for the count and page, even if another administrator changes the catalog.
@@ -82,7 +147,7 @@ export async function listProducts(filters: ProductFilters): Promise<ProductList
     const count = await client.query<{ total: string }>(`SELECT COUNT(*)::text AS total ${fromWhere}`,values);
     const total = Number(count.rows[0].total);
     const results = await client.query<Row>(
-      `SELECT ${columns} ${fromWhere} ORDER BY ${orderBy[sort]} LIMIT $6 OFFSET $7`,
+      `SELECT ${columns} ${fromWhere} ORDER BY ${orderBy[sort]} LIMIT ${values.length+1} OFFSET ${values.length+2}`,
       [...values,limit,(page-1)*limit]
     );
     await client.query("COMMIT");

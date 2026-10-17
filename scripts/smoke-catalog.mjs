@@ -21,9 +21,12 @@ const cookie=admin.cookie;assert.ok(cookie);
 await api("/api/admin/categories",{method:"POST",cookie,status:201,body:{id:"integration_bulk",title:"CI Bulk",emoji:"",tone:"blue",active:true}});
 const items=Array.from({length:125},(_,i)=>({
  id:"bulk_"+(i+1),title:"Тестовый товар "+(i+1),category:"integration_bulk",
- subtitle:"Demo",description:"CI fixture",image:"",badge:"",
+ subtitle:"Demo",description:(i===0?"Уникальная проверка механизма поиска по описанию": "CI fixture"),image:"",badge:"",
  price:String(1000+i+1),oldPrice:"",stock:(i+1)%2?5:0,active:true,
- specs:[{name:"Материал",value:"Пластик"}],images:[]
+ specs:[
+   {name:"Материал",value:(i+1)%2?"Пластик":"Металл"},
+   {name:"Цвет",value:(i+1)%3?"Красный":"Синий"}
+ ],images:[]
 }));
 for(let i=0;i<items.length;i+=8){
  await Promise.all(items.slice(i,i+8).map(p=>api("/api/admin/products",{method:"POST",cookie,body:p,status:201})));
@@ -39,6 +42,35 @@ const inStock=(await api("/api/products?category=integration_bulk&limit=100&inSt
 assert.equal(inStock.total,63);assert.ok(inStock.items.every(p=>p.stock>0));
 const range=(await api("/api/products?category=integration_bulk&minPrice=1005&maxPrice=1007&limit=100")).data;
 assert.equal(range.total,3);
+const selectedSpec=new URLSearchParams({category:"integration_bulk",limit:"100"});
+selectedSpec.append("spec",JSON.stringify(["Материал","Металл"]));
+const matching=(await api("/api/products?"+selectedSpec.toString())).data;
+assert.equal(matching.total,62);
+assert.ok(matching.items.every(p=>p.specs.some(s=>s.name==="Материал"&&s.value==="Металл")));
+selectedSpec.append("spec",JSON.stringify(["Цвет","Синий"]));
+const combined=(await api("/api/products?"+selectedSpec.toString())).data;
+assert.equal(combined.total,20); // even numbers divisible by 3 from 1..125
+const textMatch=(await api("/api/products?category=integration_bulk&q="+encodeURIComponent("металл"))).data;
+assert.equal(textMatch.total,62);
+const descriptionMatch=(await api("/api/products?category=integration_bulk&q="+encodeURIComponent("уникальная проверка"))).data;
+assert.equal(descriptionMatch.total,1);
+assert.equal(descriptionMatch.items[0].id,"bulk_1");
+const facets=(await api("/api/products/facets?category=integration_bulk")).data;
+assert.equal(facets.source,"database");
+const material=facets.groups.find(x=>x.name==="Материал");
+assert.deepEqual(material.values.map(x=>[x.value,x.count]).sort((a,b)=>a[0].localeCompare(b[0],"ru")),
+ [["Металл",62],["Пластик",63]]);
+const color=facets.groups.find(x=>x.name==="Цвет");
+assert.ok(color);
+assert.equal(color.values.reduce((sum,x)=>sum+x.count,0),125);
+const scarce=(await api("/api/products/facets?category=integration_bulk&inStock=true")).data;
+assert.equal(scarce.groups.find(x=>x.name==="Материал").values[0].count,63);
+await api("/api/products?spec=not-json",{status:400});
+await api("/api/products/facets?spec=not-json",{status:400});
+const injection=new URLSearchParams();
+injection.append("spec",JSON.stringify(["Цвет","Синий' OR TRUE --"]));
+assert.equal((await api("/api/products?category=integration_bulk&"+injection.toString())).data.total,0);
+
 const detail=(await api("/api/products/bulk_11")).data;
 assert.equal(detail.item.id,"bulk_11");assert.equal(detail.item.specs[0].name,"Материал");
 const lookup=(await api("/api/products/lookup?ids=bulk_1,bulk_120,bulk_1,no_such_id")).data;

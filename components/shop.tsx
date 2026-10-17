@@ -1,11 +1,12 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { catalogHref, defaultCatalogRoute, parseCatalogRoute, pathToView, type CatalogOrder, type CatalogRoute, type StorefrontView } from "@/lib/catalog-route";
-import { categories as demoCategories, products as demoProducts, rub, type Category, type Product, type StoreCategory } from "@/lib/catalog";
+import { catalogHref, defaultCatalogRoute, parseCatalogRoute, pathToView, specFilterKey, type CatalogOrder, type CatalogRoute, type StorefrontView } from "@/lib/catalog-route";
+import { categories as demoCategories, products as demoProducts, rub, type Category, type Product, type ProductSpec, type StoreCategory } from "@/lib/catalog";
 
 type View = StorefrontView;
 type Sort = CatalogOrder;
 type Cart = Record<string, number>;
+type FacetGroup={name:string;values:{value:string;count:number}[]};
 const CART_KEY = "vira-shop:cart:v1";
 const FAVORITES_KEY = "vira-shop:favorites:v1";
 const validId = (id: string) => /^[A-Za-z0-9_-]{1,64}$/.test(id);
@@ -73,6 +74,10 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
   const [appliedMin, setAppliedMin] = useState("");
   const [appliedMax, setAppliedMax] = useState("");
   const [inStock, setInStock] = useState(false);
+  const [specs,setSpecs] = useState<ProductSpec[]>([]);
+  const [facetGroups,setFacetGroups] = useState<FacetGroup[]>([]);
+  const [facetsLoading,setFacetsLoading] = useState(false);
+  const [facetsError,setFacetsError] = useState("");
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -95,6 +100,7 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
     setAppliedMin(params.minPrice);
     setAppliedMax(params.maxPrice);
     setInStock(params.inStock);
+    setSpecs(params.specs);
     setUrlReady(true);
   },[]);
   useEffect(()=>{
@@ -140,6 +146,7 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
         if(appliedMin)params.set("minPrice",appliedMin);
         if(appliedMax)params.set("maxPrice",appliedMax);
         if(inStock)params.set("inStock","true");
+        for(const spec of specs)params.append("spec",JSON.stringify([spec.name,spec.value]));
         const result=await fetch("/api/products?"+params.toString(),{cache:"no-store",signal:controller.signal});
         const data=await result.json() as {items?:Product[];total?:number;totalPages?:number;error?:string;source?:"demo"|"database"};
         if(!result.ok)throw Error(data.error || "Ошибка загрузки.");
@@ -157,7 +164,34 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
     // Do not send a request on every keystroke.
     const timer=setTimeout(()=>{void load()},query?250:0);
     return ()=>{clearTimeout(timer);controller.abort()};
-  },[urlReady,view,category,query,sort,page,appliedMin,appliedMax,inStock]);
+  },[urlReady,view,category,query,sort,page,appliedMin,appliedMax,inStock,specs]);
+  useEffect(()=>{
+    if(!urlReady||view!=="catalog")return;
+    const controller=new AbortController();
+    const run=async()=>{
+      setFacetsLoading(true);setFacetsError("");
+      const params=new URLSearchParams();
+      if(category!=="all")params.set("category",category);
+      if(query.trim())params.set("q",query.trim());
+      if(appliedMin)params.set("minPrice",appliedMin);
+      if(appliedMax)params.set("maxPrice",appliedMax);
+      if(inStock)params.set("inStock","true");
+      try{
+        const response=await fetch("/api/products/facets?"+params.toString(),{cache:"no-store",signal:controller.signal});
+        const data=await response.json() as {groups?:FacetGroup[];error?:string};
+        if(!response.ok)throw Error(data.error||"Характеристики недоступны.");
+        if(!Array.isArray(data.groups))throw Error("Некорректный ответ сервера.");
+        if(!controller.signal.aborted)setFacetGroups(data.groups);
+      }catch(err){
+        if(!controller.signal.aborted){
+          setFacetGroups([]);
+          setFacetsError(err instanceof Error?err.message:"Ошибка загрузки характеристик.");
+        }
+      }finally{if(!controller.signal.aborted)setFacetsLoading(false);}
+    };
+    void run();
+    return ()=>controller.abort();
+  },[urlReady,view,category,query,appliedMin,appliedMax,inStock]);
   useEffect(() => { if (ready) { try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch {} } }, [cart, ready]);
   useEffect(() => { if (ready) { try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites)); } catch {} } }, [favorites, ready]);
   const savedIds=useMemo(()=>[...new Set([...Object.keys(cart),...favorites])].filter(validId).slice(0,100),[cart,favorites]);
@@ -180,7 +214,7 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
   // All catalog filters are represented in shareable, back/forward-safe URLs.
   const route:CatalogRoute={
     q:query,category:category==="all"?"":category,sort,page,
-    minPrice:appliedMin,maxPrice:appliedMax,inStock
+    minPrice:appliedMin,maxPrice:appliedMax,inStock,specs
   };
   const navigate=(href:string)=>{
     if(window.location.pathname+window.location.search!==href)window.history.pushState({},"",href);
@@ -195,7 +229,7 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
     navigate(catalogHref({...(reset?defaultCatalogRoute:route),...changes}));
   };
   const openCategory=(id:Category|"all")=>{
-    catalogNavigate({category:id==="all"?"":id,page:1},view!=="catalog");
+    catalogNavigate({category:id==="all"?"":id,page:1,specs:[]},view!=="catalog");
   };
   const add=(id:string)=>{
     const product=byId.get(id);if(!product || product.stock===0)return;
@@ -213,6 +247,12 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
   const cartCount=Object.values(cart).reduce((sum,n)=>sum+n,0);
   const total=cartItems.reduce((sum,p)=>sum+p.price*cart[p.id],0);
   const resetFilters=()=>catalogNavigate({},true);
+  const toggleSpec=(item:ProductSpec)=>{
+    const key=specFilterKey(item);
+    const selected=specs.some(spec=>specFilterKey(spec)===key);
+    if(!selected&&specs.length>=8)return;
+    catalogNavigate({specs:selected?specs.filter(spec=>specFilterKey(spec)!==key):[...specs,item],page:1});
+  };
   const applyPrices=(e:FormEvent<HTMLFormElement>)=>{
     e.preventDefault();
     const valid=(value:string)=>!value||/^\d{1,9}(\.\d{1,2})?$/.test(value);
@@ -226,7 +266,7 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
     {items.map(p=><ProductCard key={p.id} p={p} liked={favorites.includes(p.id)}
       quantity={cart[p.id]||0} onLike={()=>toggleLike(p.id)} onAdd={()=>add(p.id)}/>)}
   </div>;
-  const searchSubmit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); catalogNavigate({q:searchDraft.trim(),category:"",page:1},view!=="catalog"); };
+  const searchSubmit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); catalogNavigate({q:searchDraft.trim(),category:"",specs:[],page:1},view!=="catalog"); };
   return <>
     <div className="announcement"><span>Vira Shop · создаём удобные покупки</span><span>Демонстрационная версия · онлайн-оплата пока недоступна</span></div>
     <header className="site-header">
@@ -284,6 +324,24 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
             </form>
             <label className="filter-checkbox"><input type="checkbox" checked={inStock}
               onChange={e=>catalogNavigate({inStock:e.target.checked,page:1})}/> Только в наличии</label>
+            <div className="catalog-specs">
+              <h3>Характеристики</h3>
+              {facetsLoading&&<p className="facet-note" role="status">Загружаем характеристики…</p>}
+              {facetsError&&<p className="facet-note" role="alert">{facetsError}</p>}
+              {!facetsLoading&&!facetsError&&facetGroups.length===0&&<p className="facet-note">У подходящих товаров пока нет характеристик.</p>}
+              {facetGroups.map(group=><fieldset className="facet-group" key={group.name}>
+                <legend>{group.name}</legend>
+                {group.values.map(option=>{
+                  const item={name:group.name,value:option.value};
+                  const checked=specs.some(spec=>specFilterKey(spec)===specFilterKey(item));
+                  return <label className="facet-choice" key={option.value}>
+                    <input type="checkbox" checked={checked} disabled={!checked&&specs.length>=8}
+                      onChange={()=>toggleSpec(item)}/>
+                    <span>{option.value}</span><small>{option.count}</small>
+                  </label>;
+                })}
+              </fieldset>)}
+            </div>
             <button type="button" className="filter-reset" onClick={resetFilters}>Сбросить фильтры</button>
           </aside>
           <div className="catalog-results">
@@ -296,6 +354,12 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
                 <option value="rating">По рейтингу</option>
               </select></label>
             </div>
+            {specs.length>0&&<div className="selected-specs" aria-label="Выбранные характеристики">
+              {specs.map(spec=><button key={specFilterKey(spec)} type="button"
+                onClick={()=>toggleSpec(spec)} aria-label={"Убрать фильтр "+spec.name+": "+spec.value}>
+                {spec.name}: {spec.value} <span aria-hidden="true">×</span>
+              </button>)}
+            </div>}
             {pageError && <p role="alert" className="catalog-error">{pageError}</p>}
             {pageLoading?<div className="catalog-loading" role="status">Загружаем товары…</div>:
             pageProducts.length?renderProducts(pageProducts):
