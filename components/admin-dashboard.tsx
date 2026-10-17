@@ -3,6 +3,9 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {EMOJI_CHOICES,suggestCategoryEmoji,suggestedSpecs,fillMissingSpecs,type Specification} from "@/lib/admin-form-helpers";
 import dynamic from "next/dynamic";
 import AdminImageManager from "@/components/admin-image-manager";
+const AdminVariantsEditor=dynamic(()=>import("@/components/admin-variants-editor"),{
+ ssr:false,loading:()=> <p role="status">Открываем варианты…</p>
+});
 
 const FullEmojiPicker=dynamic(()=>import("@/components/admin-emoji-picker"),{
   ssr:false,
@@ -16,7 +19,7 @@ const moneyMinor=(amount:string)=>new Intl.NumberFormat("ru-RU",{style:"currency
 type Category = { id: string; title: string; emoji: string; tone: string; active: boolean; productCount: number };
 type Product = {
   id: string; category: string; title: string; subtitle: string; description: string;
-  image: string; images: string[]; specs: {name:string;value:string}[]; badge: string | null; price: string; oldPrice: string | null; stock: number; active: boolean;
+  image: string; images: string[]; specs: {name:string;value:string}[]; badge: string | null; price: string; oldPrice: string | null; stock: number; active: boolean; hasVariants:boolean; variantCount:number; variantArticles:string[];
 };
 type FormProduct = { id: string; category: string; title: string; subtitle: string; description: string;
   image: string; images: string[]; specs: Specification[]; badge: string; price: string; oldPrice: string; stock: string; active: boolean };
@@ -49,6 +52,12 @@ export default function AdminDashboard({login}:{login:string}) {
   const [emojiAuto,setEmojiAuto]=useState(true);
   const [emojiPickerOpen,setEmojiPickerOpen]=useState(false);
   const [filter,setFilter]=useState("");
+  const [stockFilter,setStockFilter]=useState<"all"|"low"|"zero"|"hidden"|"active"|"variants">("all");
+  const [categoryFilter,setCategoryFilter]=useState("all");
+  const [selectedIds,setSelectedIds]=useState<string[]>([]);
+  const [bulkPrice,setBulkPrice]=useState("");
+  const [bulkStock,setBulkStock]=useState("");
+  const [variantProduct,setVariantProduct]=useState<Product|null>(null);
   const refresh=useCallback(async()=>{
     const [p,c,o]=await Promise.all([
       api<{items:Product[]}>("/api/admin/products"),
@@ -92,6 +101,42 @@ export default function AdminDashboard({login}:{login:string}) {
       });
       setEditingProduct(null);await refresh();notice(existingProduct?"Товар обновлён: "+saved.id:"Товар создан. Артикул № "+saved.id);
     }catch(e){setError(e instanceof Error?e.message:"Ошибка сохранения.");}
+    finally{setPending(false);}
+  }
+  async function duplicateProduct(p:Product){
+    if(!confirm("Создать копию товара «"+p.title+"» с новыми артикулами, нулевыми остатками и скрытым статусом?"))return;
+    setPending(true);setError("");setSuccess("");
+    try{
+      const result=await api<{id:string;variantCount:number}>(
+        "/api/admin/products/"+encodeURIComponent(p.id)+"/duplicate",{method:"POST"});
+      await refresh();
+      setFilter(result.id);setStockFilter("all");setCategoryFilter("all");setSelectedIds([]);
+      notice("Создана скрытая копия с артикулом "+result.id+
+       (result.variantCount?" (вариантов: "+result.variantCount+").":"." )+
+       " Проверьте цену и остатки перед публикацией.");
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось скопировать товар.");}
+    finally{setPending(false);}
+  }
+  async function applyBulk(action:"price"|"stock"|"visibility",active?:boolean){
+    if(!selectedIds.length)return;
+    const raw=action==="price"?bulkPrice.trim().replace(",","."):bulkStock.trim();
+    if(action==="price"&&(!/^\\d{1,10}(\\.\\d{1,2})?$/.test(raw)||Number(raw)>9000000000)){
+      setError("Укажи корректную цену в рублях (максимум две цифры после запятой).");return;
+    }
+    if(action==="stock"&&(!/^\\d+$/.test(raw)||Number(raw)>100000000)){
+      setError("Укажи целый остаток от 0 до 100 000 000.");return;
+    }
+    if(!confirm("Изменить "+selectedIds.length+" выбранных товаров? Изменение выполняется сразу."))return;
+    setPending(true);setError("");setSuccess("");
+    try{
+      const payload={ids:selectedIds,action,...(action==="price"?{price:Number(raw)}:
+        action==="stock"?{stock:Number(raw)}:{active})};
+      const result=await api<{updated:number}>("/api/admin/products/bulk",{
+        method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)
+      });
+      await refresh();setSelectedIds([]);
+      notice("Массовая операция выполнена. Обновлено товаров: "+result.updated+".");
+    }catch(e){setError(e instanceof Error?e.message:"Ошибка массового изменения.");}
     finally{setPending(false);}
   }
   async function toggleProductVisibility(p:Product){
@@ -140,7 +185,22 @@ export default function AdminDashboard({login}:{login:string}) {
     try{await api("/api/admin/session",{method:"DELETE"});window.location.assign("/admin/login");}
     catch(e){setError(e instanceof Error?e.message:"Ошибка выхода.");}
   }
-  const visible=products.filter(p=>(p.title+" "+p.id).toLocaleLowerCase("ru").includes(filter.trim().toLocaleLowerCase("ru")));
+  const visible=products.filter(p=>{
+    const search=(p.title+" "+p.id+" "+(p.variantArticles??[]).join(" ")).toLocaleLowerCase("ru");
+    const q=filter.trim().toLocaleLowerCase("ru");
+    if(!search.includes(q))return false;
+    if(categoryFilter!=="all"&&p.category!==categoryFilter)return false;
+    if(stockFilter==="low"&&!(p.stock>0&&p.stock<=5))return false;
+    if(stockFilter==="zero"&&p.stock!==0)return false;
+    if(stockFilter==="hidden"&&p.active)return false;
+    if(stockFilter==="active"&&!p.active)return false;
+    if(stockFilter==="variants"&&!p.hasVariants)return false;
+    return true;
+  });
+  const visibleIds=visible.map(p=>p.id);
+  const selectedSet=new Set(selectedIds);
+  const lowCount=products.filter(p=>p.stock>0&&p.stock<=5).length;
+  const emptyCount=products.filter(p=>p.stock===0).length;
   const active=products.filter(p=>p.active).length;
   return <main className="admin-shell">
     <aside className="admin-sidebar">
@@ -160,10 +220,71 @@ export default function AdminDashboard({login}:{login:string}) {
       {success&&<p className="admin-success" role="status">{success}</p>}
       {loading?<div className="admin-panel">Загружаем данные…</div>:<>
         {tab==="products"&&<>
-          <div className="admin-stat-row"><div><strong>{products.length}</strong><span>Всего товаров</span></div><div><strong>{active}</strong><span>В каталоге</span></div><div><strong>{products.length-active}</strong><span>Скрыто</span></div></div>
+          <div className="admin-stat-row">
+            <div><strong>{products.length}</strong><span>Всего товаров</span></div>
+            <div><strong>{active}</strong><span>В каталоге</span></div>
+            <div><strong>{lowCount}</strong><span>Заканчиваются (1–5 шт.)</span></div>
+            <div><strong>{emptyCount}</strong><span>Нет в наличии</span></div>
+          </div>
           <div className="admin-panel">
-            <div className="admin-toolbar"><h2>Каталог</h2><input aria-label="Поиск товаров в админ-панели" placeholder="Поиск по названию или ID" value={filter} onChange={e=>setFilter(e.target.value)}/></div>
-            <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Товар</th><th>Цена</th><th>Остаток</th><th>Статус</th><th>Действия</th></tr></thead><tbody>{visible.map(p=><tr key={p.id}>
+            <div className="admin-toolbar"><h2>Каталог</h2>
+              <input aria-label="Поиск товаров в админ-панели"
+                placeholder="Поиск по названию, артикулу товара или варианта"
+                value={filter} onChange={e=>setFilter(e.target.value)}/>
+            </div>
+            <div className="admin-catalog-filters">
+              <label>Категория
+                <select aria-label="Фильтр категории" value={categoryFilter}
+                  onChange={e=>setCategoryFilter(e.target.value)}>
+                  <option value="all">Все категории</option>
+                  {categories.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}
+                </select>
+              </label>
+              <label>Состояние склада
+                <select aria-label="Фильтр остатков" value={stockFilter}
+                  onChange={e=>setStockFilter(e.target.value as typeof stockFilter)}>
+                  <option value="all">Все товары</option>
+                  <option value="low">Заканчиваются (1–5 шт.)</option>
+                  <option value="zero">Нет в наличии</option>
+                  <option value="active">В каталоге</option>
+                  <option value="hidden">Скрытые</option>
+                  <option value="variants">С вариациями</option>
+                </select>
+              </label>
+              <span>Найдено: {visible.length}</span>
+            </div>
+            <div className="admin-bulk-panel">
+              <div className="admin-bulk-top">
+                <strong>Массовое изменение · выбрано {selectedIds.length}</strong>
+                <button type="button" disabled={!selectedIds.length||pending}
+                  onClick={()=>setSelectedIds([])}>Снять выделение</button>
+              </div>
+              <p>Выдели товары галочками. Для товаров с вариациями цену и остаток меняй через «Варианты» — здесь можно менять только общую видимость.</p>
+              <div className="admin-bulk-fields">
+                <label>Цена, ₽ <input inputMode="decimal" placeholder="Например, 1490"
+                  value={bulkPrice} onChange={e=>setBulkPrice(e.target.value)}/></label>
+                <button type="button" disabled={pending||!selectedIds.length} onClick={()=>void applyBulk("price")}>Применить цену</button>
+                <label>Остаток, шт. <input type="number" min="0" step="1" placeholder="Например, 25"
+                  value={bulkStock} onChange={e=>setBulkStock(e.target.value)}/></label>
+                <button type="button" disabled={pending||!selectedIds.length} onClick={()=>void applyBulk("stock")}>Применить остаток</button>
+              </div>
+              <div className="admin-bulk-actions">
+                <button type="button" disabled={pending||!selectedIds.length} onClick={()=>void applyBulk("visibility",true)}>Показать выбранные</button>
+                <button type="button" disabled={pending||!selectedIds.length} onClick={()=>void applyBulk("visibility",false)}>Скрыть выбранные</button>
+              </div>
+            </div>
+            <div className="admin-table-wrap"><table className="admin-table"><thead><tr>
+              <th><input type="checkbox" aria-label="Выбрать все отфильтрованные товары"
+                checked={visibleIds.length>0&&visibleIds.every(id=>selectedSet.has(id))}
+                disabled={pending||!visibleIds.length}
+                onChange={e=>setSelectedIds(prev=>e.target.checked?
+                   [...new Set([...prev,...visibleIds])]:prev.filter(id=>!visibleIds.includes(id)))}/></th>
+              <th>Товар</th><th>Цена</th><th>Остаток</th><th>Статус</th><th>Действия</th>
+            </tr></thead><tbody>{visible.map(p=><tr key={p.id}>
+              <td><input type="checkbox" aria-label={"Выбрать товар "+p.id}
+                checked={selectedSet.has(p.id)} disabled={pending}
+                onChange={e=>setSelectedIds(prev=>e.target.checked?
+                   [...new Set([...prev,p.id])]:prev.filter(id=>id!==p.id))}/></td>
               <td><div className="admin-product-name">
                 {p.active?
                   <a className="admin-product-link" href={"/product/"+encodeURIComponent(p.id)}
@@ -176,8 +297,16 @@ export default function AdminDashboard({login}:{login:string}) {
                     <span className="admin-product-meta"><strong>{p.title}</strong><small>{p.id} · {categories.find(c=>c.id===p.category)?.title??p.category}</small></span>
                   </div>}
               </div></td>
-              <td><strong>{price(p.price)}</strong></td><td>{p.stock} шт.</td><td><span className={"admin-pill "+(p.active?"is-active":"")}>{p.active?"В каталоге":"Скрыт"}</span></td>
-              <td><div className="admin-actions"><button disabled={pending} onClick={()=>editProduct(p)}>Изменить</button><button disabled={pending} onClick={()=>void toggleProductVisibility(p)}>{p.active?"Скрыть":"Показать"}</button></div></td>
+              <td><strong>{p.hasVariants?"от ":""}{price(p.price)}</strong></td>
+              <td><span className={p.stock===0?"admin-no-stock":p.stock<=5?"admin-low-stock":""}>{p.stock} шт.</span>
+                {p.hasVariants&&<small className="admin-stock-detail">По {p.variantCount} вариантам</small>}
+              </td><td><span className={"admin-pill "+(p.active?"is-active":"")}>{p.active?"В каталоге":"Скрыт"}</span></td>
+              <td><div className="admin-actions">
+                <button disabled={pending} onClick={()=>editProduct(p)}>Изменить</button>
+                <button disabled={pending} onClick={()=>setVariantProduct(p)}>Варианты{p.hasVariants?" ("+p.variantCount+")":""}</button>
+                <button disabled={pending} onClick={()=>void duplicateProduct(p)}>Копировать</button>
+                <button disabled={pending} onClick={()=>void toggleProductVisibility(p)}>{p.active?"Скрыть":"Показать"}</button>
+              </div></td>
             </tr>)}</tbody></table></div>
             {visible.length===0&&<p className="admin-help">Товары не найдены.</p>}
           </div>
@@ -205,6 +334,9 @@ export default function AdminDashboard({login}:{login:string}) {
         </div>}
       </>}
     </section>
+    {variantProduct&&<AdminVariantsEditor key={variantProduct.id}
+      productId={variantProduct.id} price={variantProduct.price} stock={variantProduct.stock}
+      onClose={()=>setVariantProduct(null)} onSaved={()=>void refresh()}/>}
     {editingProduct&&<div className="admin-modal-overlay" onClick={()=>{if(!pending&&!imageUploading)setEditingProduct(null)}}><div className="admin-modal" role="dialog" aria-modal="true" aria-label="Редактор товара" onClick={e=>e.stopPropagation()}>
       <div className="admin-modal-heading"><div><span className="admin-eyebrow">КАТАЛОГ</span><h2>{existingProduct?"Редактировать товар":"Новый товар"}</h2></div><button disabled={pending||imageUploading} aria-label="Закрыть" onClick={()=>setEditingProduct(null)}>×</button></div>
       <form onSubmit={e=>void saveProduct(e)}>

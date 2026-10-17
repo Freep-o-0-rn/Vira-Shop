@@ -407,3 +407,27 @@
 .product-variant-copy{border:0;background:transparent;padding:4px;color:#3268d2;font-size:11px;font-weight:750;text-decoration:underline;text-underline-offset:3px}
 .product-variant-hint{font-size:11px;line-height:1.5;color:#8996aa;margin:7px 0 0}
 @media(max-width:640px){.variant-bulk-fields{align-items:stretch}.variant-bulk-fields>button{width:100%}.variant-template-row span{width:100%}.product-variant-meta{align-items:flex-start;flex-direction:column;gap:4px}}
+
+
+/* Vira Shop 0.13 — catalog stock filters, article search and bulk operations */
+.admin-catalog-filters{display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin:12px 0 16px}
+.admin-catalog-filters label{display:flex;flex-direction:column;gap:5px;font-weight:700;font-size:11px;color:#7386a3;min-width:180px;flex:1}
+.admin-catalog-filters select{background:#fff;border:1px solid #dee6f3;color:#243a64;padding:10px 12px;border-radius:9px;width:100%;min-width:0;font-size:12px}
+.admin-catalog-filters>span{font-size:11px;font-weight:700;color:#788aa3;padding-bottom:12px}
+.admin-bulk-panel{border:1px solid #d8e4f7;background:#f7faff;border-radius:13px;padding:16px;margin:12px 0 18px}
+.admin-bulk-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.admin-bulk-top strong{font-size:13px;color:#2a4170}
+.admin-bulk-panel p{font-size:11px;color:#7788a2;line-height:1.65;margin:9px 0 12px}
+.admin-bulk-top button,.admin-bulk-actions button{border:1px solid #d4e2f8;border-radius:8px;background:white;color:#285eca;padding:9px 12px;font-size:11px;font-weight:750}
+.admin-bulk-fields{display:flex;align-items:end;flex-wrap:wrap;gap:8px}
+.admin-bulk-fields label{display:flex;flex-direction:column;gap:6px;flex:1;min-width:155px;color:#546d94;font-size:11px;font-weight:700}
+.admin-bulk-fields input{width:100%;border:1px solid #d5e2f8;border-radius:8px;padding:10px;font-size:12px;background:white;color:#273d61}
+.admin-bulk-fields>button{border:0;border-radius:8px;background:#2465e8;color:#fff;font-size:11px;font-weight:750;min-height:39px;padding:10px 12px}
+.admin-bulk-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px}
+.admin-bulk-panel button:disabled{opacity:.4;cursor:not-allowed}
+.admin-table td>input[type=checkbox],.admin-table th>input[type=checkbox]{width:17px;height:17px;accent-color:#2767e8;cursor:pointer}
+.admin-table .admin-actions{flex-wrap:wrap}
+.admin-stock-detail{display:block;color:#8b9ab0;font-size:10px;margin-top:4px;white-space:nowrap}
+.admin-low-stock{color:#bd7b0c;font-weight:800}
+.admin-no-stock{color:#d24c5a;font-weight:800}
+@media(max-width:720px){.admin-catalog-filters label{min-width:120px}.admin-bulk-fields>button{flex:1}.admin-bulk-panel{padding:11px}}

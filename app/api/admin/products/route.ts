@@ -13,9 +13,24 @@ export async function GET(request: NextRequest) {
     if (denied) return denied;
     const result = await getPool().query(
       `SELECT p.id, p.title, p.subtitle, p.description, p.category_id AS category,
-              ROUND(p.price_minor::numeric / 100, 2)::text AS price,
-              CASE WHEN p.old_price_minor IS NULL THEN NULL ELSE ROUND(p.old_price_minor::numeric / 100, 2)::text END AS "oldPrice",
-              p.image_url AS image, p.images, p.specs, p.badge, p.stock_count AS stock, p.is_active AS active,
+              ROUND((CASE WHEN p.variant_groups <> '[]'::jsonb
+                THEN COALESCE((SELECT MIN(v.price_minor) FROM shop_product_variants v
+                  WHERE v.product_id=p.id AND v.is_active=TRUE),p.price_minor)
+                ELSE p.price_minor END)::numeric / 100, 2)::text AS price,
+              CASE WHEN p.variant_groups <> '[]'::jsonb THEN NULL
+                WHEN p.old_price_minor IS NULL THEN NULL
+                ELSE ROUND(p.old_price_minor::numeric / 100, 2)::text END AS "oldPrice",
+              p.image_url AS image, p.images, p.specs, p.badge,
+              CASE WHEN p.variant_groups <> '[]'::jsonb THEN
+                (SELECT COALESCE(SUM(v.stock_count),0)::int FROM shop_product_variants v
+                  WHERE v.product_id=p.id AND v.is_active=TRUE)
+                ELSE p.stock_count END AS stock,
+              (p.variant_groups <> '[]'::jsonb) AS "hasVariants",
+              (SELECT COUNT(*)::int FROM shop_product_variants v
+                WHERE v.product_id=p.id AND v.is_active=TRUE) AS "variantCount",
+              (SELECT COALESCE(array_agg(v.article ORDER BY v.article),ARRAY[]::text[])
+                FROM shop_product_variants v WHERE v.product_id=p.id) AS "variantArticles",
+              p.is_active AS active,
               p.created_at AS "createdAt"
          FROM shop_products p ORDER BY p.created_at DESC, p.id ASC LIMIT 1000`
     );
