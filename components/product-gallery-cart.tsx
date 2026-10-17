@@ -70,9 +70,10 @@ export default function ProductGalleryAndCart({product}:{product:Product}){
       </button>
       <button type="button" className="product-detail-favorite" aria-pressed={liked}
         onClick={toggleLike}>{liked?"♥ В избранном":"♡ Добавить в избранное"}</button>
+      <a className="product-detail-checkout" href="/checkout">Перейти к оформлению →</a>
       {notice&&<p role="status" className="product-detail-notice">{notice}</p>}
       <div className="product-detail-benefits"><span>✓ Характеристики товара на отдельной странице</span>
-        <span>✓ Корзина сохраняется в браузере</span><span>ⓘ Заказы пока недоступны</span></div>
+        <span>✓ Корзина сохраняется в браузере</span><span>ⓘ Онлайн-оплата пока не подключена</span></div>
     </div>
   </div>;
 }

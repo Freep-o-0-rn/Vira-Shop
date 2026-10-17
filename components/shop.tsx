@@ -195,6 +195,7 @@ export default function Shop() {
         <button type="button" className="catalog-trigger" onClick={() => openCategory("all")}><Icon name="grid"/> <span>Каталог</span></button>
         <form className="search-form" onSubmit={searchSubmit}><input type="search" aria-label="Поиск товаров" placeholder="Искать товары и категории" value={query} onChange={(event) => {setQuery(event.target.value);setPage(1);}}/><button type="submit" aria-label="Найти"><Icon name="search"/> <span>Найти</span></button></form>
         <nav className="header-nav" aria-label="Разделы магазина">
+          <button type="button" onClick={() => window.location.assign("/account")}><Icon name="user"/><span>Кабинет</span></button>
           <button type="button" onClick={() => go("favorites")} className={view === "favorites" ? "active" : ""}><Icon name="heart"/><span>Избранное</span>{favorites.length > 0 && <small>{favorites.length}</small>}</button>
           <button type="button" onClick={() => go("cart")} className={view === "cart" ? "active" : ""}><Icon name="bag"/><span>Корзина</span>{cartCount > 0 && <small>{cartCount}</small>}</button>
         </nav>
@@ -270,11 +271,11 @@ export default function Shop() {
         </div>
       </section>}
       {view === "favorites" && <section className="inner-page"><div className="page-heading"><div><span className="kicker">ВАША ПОДБОРКА</span><h1>Избранное</h1><p>Вещи, которые вам понравились</p></div><span className="count-label">{favorites.length} товаров</span></div>
-        {favoritesItems.length ? renderProducts(favoritesItems) : <div className="empty-panel"><span>♡</span><h2>Пока ничего нет</h2><p>Нажимайте сердечко на карточках товаров.</p><button onClick={() => openCategory("all")}>Перейти в каталог</button></div>}
+        {favoritesItems.length ? renderProducts(favoritesItems) : <div className="empty-panel"><span>♡</span><h2>Пока ничего нет</h2><p>Нажимайте сердечко на карточках товаров.</p><button onClick={() => openCategory("all")}>Перейти в каталог</button><p><a href="/checkout" className="buyer-link">Открыть серверную корзину →</a></p></div>}
       </section>}
       {view === "cart" && <section className="inner-page"><div className="page-heading"><div><span className="kicker">ВАШИ ПОКУПКИ</span><h1>Корзина</h1><p>Соберите товары в одном месте</p></div><span className="count-label">{cartCount} шт.</span></div>
         {cartItems.length ? <div className="cart-layout"><div className="cart-list">{cartItems.map((p) => <div className="cart-row" key={p.id}><img src={p.image} alt={p.title}/><div className="cart-description"><strong>{p.title}</strong><small>{p.subtitle}</small><button type="button" className="remove-link" onClick={() => setCart((old) => { const next = { ...old }; delete next[p.id]; return next; })}>Удалить</button></div><div className="cart-controls"><div><button onClick={() => subtract(p.id)} aria-label={"Уменьшить количество " + p.title}>−</button><span>{cart[p.id]}</span><button onClick={() => add(p.id)} aria-label={"Увеличить количество " + p.title}>+</button></div><strong>{rub(p.price * cart[p.id])}</strong></div></div>)}</div>
-          <aside className="cart-summary"><h2>Ваш заказ</h2><div><span>Товаров: {cartCount}</span><strong>{rub(total)}</strong></div><div className="summary-total"><span>Итого</span><strong>{rub(total)}</strong></div><button type="button" disabled>Оформление скоро появится</button><p>Это демонстрация. Реальная оплата и заказы отключены.</p></aside></div>
+          <aside className="cart-summary"><h2>Ваш заказ</h2><div><span>Товаров: {cartCount}</span><strong>{rub(total)}</strong></div><div className="summary-total"><span>Предварительно</span><strong>{rub(total)}</strong></div><button type="button" onClick={()=>window.location.assign("/checkout")}>Перейти к оформлению</button><p>Расчёт предварительный. Цена и наличие проверяются сервером. Оплата отключена.</p></aside></div>
           : <div className="empty-panel"><span>🛒</span><h2>Корзина пуста</h2><p>Добавьте товары из каталога, чтобы увидеть их здесь.</p><button onClick={() => openCategory("all")}>Перейти в каталог</button></div>}
       </section>}
     </main>

@@ -1,6 +1,10 @@
 "use client";
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 
+type AdminOrder={id:string;status:string;paymentStatus:string;totalMinor:string;address:{recipient:string;phone:string;city:string;street:string;building:string;apartment:string};note:string;createdAt:string;customerName:string;customerEmail:string;items:{id:string;title:string;quantity:number;lineMinor:string}[]};
+const labels:Record<string,string>={new:"Новый",confirmed:"Подтверждён",packing:"Сборка",shipped:"Отправлен",completed:"Завершён",cancelled:"Отменён"};
+const nextSteps:Record<string,string[]>={new:["confirmed","cancelled"],confirmed:["packing","cancelled"],packing:["shipped","cancelled"],shipped:["completed"],completed:[],cancelled:[]};
+const moneyMinor=(amount:string)=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB"}).format(Number(amount)/100);
 type Category = { id: string; title: string; emoji: string; tone: string; active: boolean; productCount: number };
 type Product = {
   id: string; category: string; title: string; subtitle: string; description: string;
@@ -21,8 +25,9 @@ async function api<T = unknown>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 export default function AdminDashboard({login}:{login:string}) {
-  const [tab,setTab]=useState<"products"|"categories">("products");
+  const [tab,setTab]=useState<"products"|"categories"|"orders">("products");
   const [products,setProducts]=useState<Product[]>([]);
+  const [orders,setOrders]=useState<AdminOrder[]>([]);
   const [categories,setCategories]=useState<Category[]>([]);
   const [pending,setPending]=useState(false);
   const [loading,setLoading]=useState(true);
@@ -34,11 +39,12 @@ export default function AdminDashboard({login}:{login:string}) {
   const [existingCategory,setExistingCategory]=useState(false);
   const [filter,setFilter]=useState("");
   const refresh=useCallback(async()=>{
-    const [p,c]=await Promise.all([
+    const [p,c,o]=await Promise.all([
       api<{items:Product[]}>("/api/admin/products"),
-      api<{items:Category[]}>("/api/admin/categories")
+      api<{items:Category[]}>("/api/admin/categories"),
+      api<{items:AdminOrder[]}>("/api/admin/orders")
     ]);
-    setProducts(p.items);setCategories(c.items);
+    setProducts(p.items);setCategories(c.items);setOrders(o.items);
   },[]);
   useEffect(()=>{
     let active=true;
@@ -113,6 +119,17 @@ export default function AdminDashboard({login}:{login:string}) {
     }catch(e){setError(e instanceof Error?e.message:"Ошибка загрузки.");}
     finally{setPending(false);event.target.value="";}
   }
+  async function changeOrderStatus(order:AdminOrder,status:string){
+    if(status==="cancelled"&&!confirm("Отменить заказ № "+order.id+" и вернуть товары на склад?"))return;
+    setPending(true);setError("");setSuccess("");
+    try{
+      await api("/api/admin/orders/"+order.id,{
+        method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})
+      });
+      await refresh();notice("Статус заказа № "+order.id+" обновлён.");
+    }catch(e){setError(e instanceof Error?e.message:"Ошибка изменения статуса.");}
+    finally{setPending(false);}
+  }
   async function logout(){
     try{await api("/api/admin/session",{method:"DELETE"});window.location.assign("/admin/login");}
     catch(e){setError(e instanceof Error?e.message:"Ошибка выхода.");}
@@ -125,13 +142,14 @@ export default function AdminDashboard({login}:{login:string}) {
       <p className="admin-sidebar-label">УПРАВЛЕНИЕ</p>
       <button className={tab==="products"?"selected":""} onClick={()=>{setTab("products");setEditingCategory(null);setError("");}}>📦 Товары</button>
       <button className={tab==="categories"?"selected":""} onClick={()=>{setTab("categories");setEditingProduct(null);setError("");}}>▦ Категории</button>
+      <button className={tab==="orders"?"selected":""} onClick={()=>{setTab("orders");setEditingProduct(null);setEditingCategory(null);setError("");}}>🧾 Заказы</button>
       <a href="/" className="admin-store-link">↗ Открыть магазин</a>
       <div className="admin-profile">Администратор <strong>{login}</strong><button onClick={()=>void logout()}>Выйти</button></div>
     </aside>
     <section className="admin-content">
       <div className="admin-topline"><span>VIRA SHOP / АДМИНИСТРИРОВАНИЕ</span><span>Приватная панель</span></div>
-      <div className="admin-title-row"><div><h1>{tab==="products"?"Управление товарами":"Категории товаров"}</h1><p>{tab==="products"?"Добавляйте товары, редактируйте цены, остатки и фотографии.":"Создавайте категории для магазина и настраивайте их видимость."}</p></div>
-      <button className="admin-primary" onClick={tab==="products"?startAddProduct:startAddCategory}>{tab==="products"?"+ Новый товар":"+ Новая категория"}</button></div>
+      <div className="admin-title-row"><div><h1>{tab==="products"?"Управление товарами":tab==="categories"?"Категории товаров":"Заказы покупателей"}</h1><p>{tab==="products"?"Добавляйте товары, редактируйте цены, остатки и фотографии.":tab==="categories"?"Создавайте категории для магазина и настраивайте их видимость.":"Просмотр новых заявок, обработка статусов и отмена с возвратом остатков."}</p></div>
+      {tab!=="orders"&&<button className="admin-primary" onClick={tab==="products"?startAddProduct:startAddCategory}>{tab==="products"?"+ Новый товар":"+ Новая категория"}</button>}</div>
       {error&&<p className="admin-alert" role="alert">{error}</p>}
       {success&&<p className="admin-success" role="status">{success}</p>}
       {loading?<div className="admin-panel">Загружаем данные…</div>:<>
@@ -148,6 +166,26 @@ export default function AdminDashboard({login}:{login:string}) {
           </div>
         </>}
         {tab==="categories"&&<div className="admin-panel"><h2>Категории</h2><div className="admin-category-list">{categories.map(c=><div className="admin-category-item" key={c.id}><div className="admin-category-icon">{c.emoji||"📦"}</div><div><strong>{c.title}</strong><small>{c.id} · товаров: {c.productCount} · {c.active?"активна":"скрыта"}</small></div><div className="admin-actions"><button disabled={pending} onClick={()=>editCategory(c)}>Изменить</button><button disabled={pending||c.productCount>0} title={c.productCount?"Сначала перенесите товары":""} onClick={()=>void deleteCategory(c)}>Удалить</button></div></div>)}</div></div>}
+        {tab==="orders"&&<div className="admin-panel">
+          <div className="admin-toolbar"><h2>Последние заказы</h2><span>{orders.length} записей</span></div>
+          {orders.length?orders.map(order=><article className="admin-order" key={order.id}>
+            <div className="admin-order-top"><div><strong>Заявка № {order.id}</strong>
+              <small>{new Date(order.createdAt).toLocaleString("ru-RU")} · {order.customerName} ({order.customerEmail})</small></div>
+              <span className="admin-pill">{labels[order.status]||order.status}</span></div>
+            <div className="admin-order-content">
+              <div><h3>Состав</h3>{order.items.map((item,i)=><p key={i}>{item.title} × {item.quantity} — {moneyMinor(item.lineMinor)}</p>)}
+                <strong>Итого: {moneyMinor(order.totalMinor)}</strong><p>Оплата: не подключена</p></div>
+              <div><h3>Адрес получателя</h3>
+                <p>{order.address.recipient}, {order.address.phone}</p>
+                <p>{order.address.city}, {order.address.street}, д. {order.address.building}{order.address.apartment?", кв. "+order.address.apartment:""}</p>
+                {order.note&&<p>Комментарий: {order.note}</p>}</div>
+            </div><div className="admin-actions">
+              {(nextSteps[order.status]||[]).map(status=>
+                <button type="button" key={status} disabled={pending} onClick={()=>void changeOrderStatus(order,status)}>
+                  {status==="cancelled"?"Отменить / вернуть остатки":"Перевести: "+labels[status]}</button>)}
+            </div>
+          </article>):<p className="admin-help">Новых заказов пока нет.</p>}
+        </div>}
       </>}
     </section>
     {editingProduct&&<div className="admin-modal-overlay" onClick={()=>{if(!pending)setEditingProduct(null)}}><div className="admin-modal" role="dialog" aria-modal="true" aria-label="Редактор товара" onClick={e=>e.stopPropagation()}>
