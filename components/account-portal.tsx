@@ -1,11 +1,14 @@
 "use client";
 import {useEffect,useState,type FormEvent} from "react";
 import Link from "next/link";
+import {DELIVERY_LABELS,LOGISTICS_LABELS,type DeliveryMethod,type LogisticsStatus} from "@/lib/logistics";
 type Customer={id:string;name:string;email:string};
 type Address={id:string;recipient:string;phone:string;city:string;street:string;building:string;apartment:string;comment:string};
 type Item={id:string;variantId:string|null;selection:{name:string;value:string}[];title:string;quantity:number;unitMinor:string;lineMinor:string};
 type Order={id:string;status:string;paymentStatus:string;paymentMethod:string;
-  deliveryMethod:"pickup"|"courier";deliveryFeeMinor:string|null;subtotalMinor:string;totalMinor:string;
+  deliveryMethod:DeliveryMethod;logisticsStatus:LogisticsStatus;carrierCode:string|null;
+  trackingNumber:string|null;deliveryPoint:{name:string;address:string}|null;
+  deliveryFeeMinor:string|null;subtotalMinor:string;totalMinor:string;
   createdAt:string;address:Address;items:Item[]};
 const EMPTY={recipient:"",phone:"",city:"",street:"",building:"",apartment:"",comment:""};
 const statuses:Record<string,string>={new:"Новая",confirmed:"Подтверждена",packing:"Собирается",shipped:"Отправлена",completed:"Завершена",cancelled:"Отменена"};
@@ -117,12 +120,18 @@ export default function AccountPortal(){
        <div className="buyer-order-head"><strong>Заказ № {o.id}</strong><span>{statuses[o.status]||o.status}</span></div>
        <small>{new Date(o.createdAt).toLocaleString("ru-RU")} · Оплата не подключена</small>
        <p className="order-delivery-description">
-         <strong>{o.deliveryMethod==="pickup"?"Самовывоз":"Доставка по адресу"}</strong>
+         <strong>{DELIVERY_LABELS[o.deliveryMethod]}</strong>
          {" · "+o.address.recipient+", "+o.address.phone}
-         {o.deliveryMethod==="courier"?" · "+[o.address.city,o.address.street,"д. "+o.address.building].filter(Boolean).join(", "):" · Пункт выдачи согласуется отдельно"}
+         {o.deliveryMethod==="pickup"?" · Точка выдачи согласуется отдельно":
+         o.deliveryMethod==="ozon_pvz"&&o.deliveryPoint?" · "+o.deliveryPoint.address:
+          " · "+[o.address.city,o.address.street,"д. "+o.address.building].filter(Boolean).join(", ")}
+       </p>
+       <p className="order-delivery-description">
+        Статус получения: <strong>{LOGISTICS_LABELS[o.logisticsStatus]??"Уточняется"}</strong>
+        {o.trackingNumber&&<span> · Трек-номер: {o.trackingNumber}</span>}
        </p>
        <div className="buyer-order-items">{o.items.map((i,k)=><p key={k}>{i.title}{i.variantId?" · арт. "+i.variantId:""}{i.selection?.length?" ("+i.selection.map(s=>s.value).join(" / ")+")":""} × {i.quantity} — {money(i.lineMinor)}</p>)}</div>
-       <div><strong>{o.deliveryMethod==="courier"?"Товары: ":"Итого: "}{money(o.totalMinor)}</strong>
+       <div><strong>{o.deliveryMethod==="pickup"?"Итого: ":"Товары: "}{money(o.totalMinor)}</strong>
          {o.deliveryFeeMinor===null?<p className="buyer-muted">Доставка: стоимость уточняется</p>:
            <p className="buyer-muted">Самовывоз: бесплатно</p>}
          <small>Статус оплаты: не оплачено · Платёжная система не подключена</small>

@@ -3,7 +3,7 @@ import {useEffect,useRef,useState} from "react";
 import Link from "next/link";
 type Address={id:string;recipient:string;phone:string;city:string;street:string;building:string;apartment:string};
 type CartItem={id:string;variantId:string|null;selection:{name:string;value:string}[];quantity:number;title:string;image:string;priceMinor:string;stock:number;available:boolean};
-type DeliveryMethod="pickup"|"courier";
+type DeliveryMethod="pickup"|"courier"|"transport"|"ozon_pvz";
 type Quote={method:DeliveryMethod;itemsCount:number;subtotalMinor:string;deliveryFeeMinor:string|null;
  totalMinor:string|null;deliveryPricePending:boolean;canPlace:boolean;paymentEnabled:boolean;
  unavailableArticles:string[];paymentStatus:string;paymentMethod:string};
@@ -105,7 +105,8 @@ export default function Checkout(){
   finally{setBusy(false);}
  }
  async function create(){
-  if(method==="courier"&&!addressId)return setError("Выберите адрес доставки.");
+  if((method==="courier"||method==="transport")&&!addressId)return setError("Выберите адрес доставки.");
+  if(method==="ozon_pvz")return setError("ПВЗ Ozon ещё не подключены. Выберите другой способ получения.");
   if(method==="pickup"&&(pickupName.trim().length<2||!/^[+0-9()\s-]{6,32}$/.test(pickupPhone.trim())))
     return setError("Для самовывоза укажите имя получателя и действительный телефон.");
   if(!quote||quoteLoading||quote.method!==method||!quote.canPlace)
@@ -115,7 +116,7 @@ export default function Checkout(){
   try{
    const result=await api<{id:string}>("/api/account/orders",{
     method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({addressId:method==="courier"?addressId:undefined,
+    body:JSON.stringify({addressId:method==="courier"||method==="transport"?addressId:undefined,
       pickupContact:method==="pickup"?{recipient:pickupName.trim(),phone:pickupPhone.trim()}:undefined,
       deliveryMethod:method,note,key:requestKey.current})
    });
@@ -127,7 +128,7 @@ export default function Checkout(){
  const total=cart.reduce((sum,i)=>sum+Number(i.priceMinor)*i.quantity,0);
  const serverTotal=quote?Number(quote.subtotalMinor):total;
  const canPlace=!!quote&&quote.method===method&&quote.canPlace&&!quoteLoading&&!quoteError&&
-   !busy&&available&&cart.length>0&&(method==="courier"?!!addressId:
+   !busy&&available&&cart.length>0&&method!=="ozon_pvz"&&(method==="courier"||method==="transport"?!!addressId:
       pickupName.trim().length>=2&&/^[+0-9()\s-]{6,32}$/.test(pickupPhone.trim()));
  return <main className="container buyer-page">
   <div className="buyer-crumb"><Link href="/">Vira Shop</Link> / Оформление</div>
@@ -139,8 +140,8 @@ export default function Checkout(){
     <Link href="/account" className="buyer-link">Войти или зарегистрироваться →</Link></section>:
    success?<section className="buyer-panel buyer-confirmed"><h2>Заявка № {success} создана</h2>
      <p>Заявка записана в базу, товары зарезервированы. Оплата не проводилась.</p>
-     <p>Способ получения: {method==="pickup"?"самовывоз":"доставка по адресу"}.
-       {method==="courier"?" Стоимость доставки уточняется у продавца.":" Пункт выдачи будет согласован отдельно."}</p>
+     <p>Способ получения: {method==="pickup"?"самовывоз":method==="transport"?"транспортная компания":"доставка по адресу"}.
+       {method==="pickup"?" Пункт выдачи будет согласован отдельно.":" Стоимость доставки уточняется у продавца."}</p>
      <p>Следить за статусом можно в личном кабинете.</p>
      <Link href="/account" className="buyer-primary">Посмотреть заказы</Link></section>:
    <div className="buyer-layout">
@@ -174,9 +175,21 @@ export default function Checkout(){
         <span><strong>Доставка по адресу</strong>
           <small>Стоимость и срок продавец уточнит при подтверждении заявки.</small></span>
       </label>
+      <label className={method==="transport"?"selected":""}>
+        <input type="radio" name="deliveryMethod" value="transport" checked={method==="transport"}
+          onChange={()=>setMethod("transport")} disabled={busy}/>
+        <span><strong>Транспортная компания</strong>
+          <small>Перевозчик и условия отправки согласуются с продавцом.</small></span>
+      </label>
+      <label className="is-unavailable">
+        <input type="radio" name="deliveryMethod" value="ozon_pvz" disabled
+          checked={false} aria-label="ПВЗ Ozon пока недоступны"/>
+        <span><strong>ПВЗ Ozon — подключение ожидается</strong>
+          <small>Будем автоматически предлагать ближайший доступный ПВЗ по проверенным данным Ozon, с правом выбрать другой. Пока API не подключён, адреса не подставляем.</small></span>
+      </label>
      </fieldset>
-     {method==="courier"?<>
-       <label>Адрес доставки<select value={addressId} disabled={busy} onChange={e=>setAddressId(e.target.value)}>
+     {(method==="courier"||method==="transport")?<>
+       <label>Адрес получателя<select value={addressId} disabled={busy} onChange={e=>setAddressId(e.target.value)}>
         <option value="">Выберите адрес</option>
         {addresses.map(a=><option key={a.id} value={a.id}>{a.city}, {a.street}, д. {a.building}</option>)}
        </select></label>
@@ -194,7 +207,7 @@ export default function Checkout(){
        <strong>{method==="pickup"?"Бесплатно":"Стоимость уточняется"}</strong></div>
      <div className="checkout-total checkout-order-total"><span>{method==="pickup"?"Итого":"Сумма товаров"}</span>
        <strong>{money(serverTotal)}</strong></div>
-     {method==="courier"&&<p className="checkout-unquoted">Итог с доставкой пока неизвестен.
+     {method!=="pickup"&&<p className="checkout-unquoted">Итог с доставкой пока неизвестен.
        Перед оплатой продавец должен согласовать с вами полную стоимость.</p>}
      {quoteLoading&&<p className="buyer-muted" role="status">Проверяем цены и наличие на сервере…</p>}
      {quoteError&&<p className="buyer-error" role="alert">{quoteError}</p>}

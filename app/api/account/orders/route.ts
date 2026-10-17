@@ -11,6 +11,8 @@ export async function GET(req:NextRequest){
       o.subtotal_minor::text AS "subtotalMinor",
       o.delivery_fee_minor::text AS "deliveryFeeMinor",
       o.delivery_method AS "deliveryMethod",
+      o.logistics_status AS "logisticsStatus",o.carrier_code AS "carrierCode",
+      o.tracking_number AS "trackingNumber",o.delivery_point AS "deliveryPoint",
       o.payment_method AS "paymentMethod",
       o.delivery_address AS address,o.buyer_note AS note,
       o.created_at AS "createdAt",
@@ -31,7 +33,8 @@ export async function POST(req:NextRequest){
   const method=deliveryMethod(input?.deliveryMethod??"courier");
   if(typeof key!=="string"||!/^[a-f0-9-]{36}$/.test(key)||
     !method||typeof note!=="string"||note.length>500)return bad("Некорректные параметры заявки.");
-  if(method==="courier"&&(typeof addressId!=="string"||!/^[0-9]{1,19}$/.test(addressId)))
+  if(method==="ozon_pvz")return bad("ПВЗ Ozon пока недоступны: официальный источник пунктов не подключён.",409);
+  if((method==="courier"||method==="transport")&&(typeof addressId!=="string"||!/^[0-9]{1,19}$/.test(addressId)))
     return bad("Для доставки выберите сохранённый адрес.");
   const contact=method==="pickup"?pickupContact(input?.pickupContact):null;
   if(method==="pickup"&&!contact)
@@ -45,7 +48,7 @@ export async function POST(req:NextRequest){
     "SELECT id::text FROM shop_orders WHERE customer_id=$1 AND client_key=$2",[a.customer!.id,key]);
    if(old.rowCount){await client.query("COMMIT");return NextResponse.json({id:old.rows[0].id,reused:true},{headers:noStore});}
    let addressSnapshot:Record<string,unknown>;
-   if(method==="courier"){
+   if(method==="courier"||method==="transport"){
      const addresses=await client.query(`SELECT recipient,phone,city,street,building,apartment,comment
        FROM shop_customer_addresses WHERE id=$1 AND customer_id=$2`,[addressId,a.customer!.id]);
      if(!addresses.rowCount){await client.query("ROLLBACK");return bad("Адрес не найден.",404);}
@@ -117,6 +120,10 @@ export async function POST(req:NextRequest){
    await client.query(`INSERT INTO shop_order_events
      (order_id,kind,to_status,actor_type,note)
      VALUES($1,'created','new','customer','Заявка создана покупателем.')`,[order.rows[0].id]);
+   await client.query(`INSERT INTO shop_logistics_events
+     (order_id,kind,to_status,actor_type,note)
+     VALUES($1,'created','awaiting_confirmation','customer','Ожидает подтверждения продавцом.')`,
+     [order.rows[0].id]);
    await client.query("DELETE FROM shop_customer_cart WHERE customer_id=$1",[a.customer!.id]);
    await client.query("COMMIT");
    return NextResponse.json({id:order.rows[0].id,totalMinor:String(total),

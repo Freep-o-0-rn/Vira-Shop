@@ -13,6 +13,7 @@ jobs:
       - run: node --experimental-strip-types scripts/test-catalog-route.mjs
       - run: node --experimental-strip-types scripts/test-admin-form.mjs
       - run: node --experimental-strip-types scripts/test-variant-selection.mjs
+      - run: node --experimental-strip-types scripts/test-logistics.mjs
       - run: npm run typecheck
       - run: npm run build
 
@@ -53,6 +54,8 @@ jobs:
           timeout 120s node scripts/smoke-fulfillment.mjs || (cat /tmp/vira-server.log && exit 1)
           echo "Testing order management audit trail and concurrent cancellations"
           timeout 120s node scripts/smoke-orders-workflow.mjs || (cat /tmp/vira-server.log && exit 1)
+          echo "Testing logistics, courier handoffs and Ozon fail-closed"
+          timeout 120s node scripts/smoke-logistics.mjs || (cat /tmp/vira-server.log && exit 1)
 
   windows-launcher:
     runs-on: windows-latest

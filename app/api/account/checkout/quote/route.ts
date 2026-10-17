@@ -8,6 +8,10 @@ export async function GET(req:NextRequest){
   const a=await customerGuard(req);if(a.response)return a.response;
   const method=deliveryMethod(req.nextUrl.searchParams.get("method")??"courier");
   if(!method)return bad("Недопустимый способ получения.");
+  if(method==="ozon_pvz")return NextResponse.json({
+    code:"OZON_PROVIDER_NOT_CONNECTED",available:false,
+    error:"ПВЗ Ozon не подключены. Выберите другой способ получения."
+  },{status:503,headers:noStore});
   const items=await getPool().query<{id:string;variantId:string|null;quantity:number;
      priceMinor:string;stock:number;available:boolean}>(`
     SELECT p.id,c.variant_id AS "variantId",c.quantity,

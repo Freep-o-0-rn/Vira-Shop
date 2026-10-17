@@ -1,12 +1,18 @@
 "use client";
 import {useCallback,useEffect,useState,type FormEvent} from "react";
+import AdminOrderLogistics from "@/components/admin-order-logistics";
+import {LOGISTICS_LABELS,type LogisticsStatus,type FulfillmentSource,type DeliveryMethod} from "@/lib/logistics";
 type Status="new"|"confirmed"|"packing"|"shipped"|"completed"|"cancelled";
 type OrderItem={id:string;title:string;quantity:number;variantId:string|null;
  selection:{name:string;value:string}[];unitMinor:string;lineMinor:string};
 type Address={recipient:string;phone:string;city:string;street:string;building:string;apartment:string;comment?:string;pickupPoint?:string};
 type Order={
  id:string;status:Status;paymentStatus:string;paymentMethod:string;
- deliveryMethod:"courier"|"pickup";subtotalMinor:string;deliveryFeeMinor:string|null;
+ deliveryMethod:DeliveryMethod;subtotalMinor:string;deliveryFeeMinor:string|null;
+ logisticsStatus:LogisticsStatus;fulfillmentSource:FulfillmentSource;
+ carrierCode:string|null;trackingNumber:string|null;purchaseReference:string|null;
+ logisticsHistory:{id:string;kind:string;fromStatus:LogisticsStatus|null;toStatus:LogisticsStatus;
+ actor:string;note:string;createdAt:string}[];
  totalMinor:string;address:Address;note:string;createdAt:string;updatedAt?:string;
  customerName:string;customerEmail:string;items:OrderItem[];
 };
@@ -16,7 +22,8 @@ const labels:Record<Status,string>={new:"Новый",confirmed:"Подтверж
  shipped:"Отправлен",completed:"Завершён",cancelled:"Отменён"};
 const steps:Record<Status,Status[]>={new:["confirmed","cancelled"],confirmed:["packing","cancelled"],
  packing:["shipped","cancelled"],shipped:["completed"],completed:[],cancelled:[]};
-const methods={courier:"Доставка по адресу",pickup:"Самовывоз"};
+const methods:Record<DeliveryMethod,string>={courier:"Доставка по адресу",pickup:"Самовывоз",
+ transport:"Транспортная компания",ozon_pvz:"ПВЗ Ozon"};
 const currency=(s:string)=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB"}).format(Number(s)/100);
 async function call<T>(path:string,options?:RequestInit):Promise<T>{
  const response=await fetch(path,{cache:"no-store",...options});
@@ -111,9 +118,12 @@ export default function AdminOrdersPanel({onChanged}:{onChanged?:()=>Promise<voi
      <table className="admin-table admin-orders-table">
        <thead><tr><th>Номер / дата</th><th>Покупатель</th><th>Получение</th><th>Товары</th><th>Сумма товаров</th><th>Статус</th><th></th></tr></thead>
        <tbody>{rows.map(order=><tr key={order.id}>
-         <td><strong>№ {order.id}</strong><small>{new Date(order.createdAt).toLocaleString("ru-RU")}</small></td>
+         <td><strong>№ {order.id}</strong><small>{new Date(order.createdAt).toLocaleString("ru-RU")}</small>
+           {order.status==="new"&&Date.now()-new Date(order.createdAt).getTime()>30*60*1000&&
+            <small className="admin-order-attention">Требует внимания · более 30 мин</small>}</td>
          <td><strong>{order.customerName}</strong><small>{order.customerEmail}</small></td>
-         <td>{methods[order.deliveryMethod]}</td>
+         <td>{methods[order.deliveryMethod]}
+           <small>{LOGISTICS_LABELS[order.logisticsStatus]}</small></td>
          <td>{order.items.reduce((n,i)=>n+i.quantity,0)} шт.</td>
          <td><strong>{currency(order.totalMinor)}</strong>
             {order.deliveryFeeMinor===null&&<small>Доставка уточняется</small>}</td>
@@ -169,6 +179,7 @@ export default function AdminOrdersPanel({onChanged}:{onChanged?:()=>Promise<voi
            <p>{details.customerEmail}</p>
            {details.note&&<p>Комментарий покупателя: {details.note}</p>}
          </section>
+         <AdminOrderLogistics order={details} onSaved={reload}/>
          <section className="admin-order-detail-section">
            <h3>История обработки</h3>
            <ol className="admin-order-history">

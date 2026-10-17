@@ -24,6 +24,9 @@ export async function GET(req:NextRequest,{params}:Ctx){
     o.payment_method AS "paymentMethod",o.currency,o.total_minor::text AS "totalMinor",
     o.subtotal_minor::text AS "subtotalMinor",
     o.delivery_method AS "deliveryMethod",
+    o.logistics_status AS "logisticsStatus",o.fulfillment_source AS "fulfillmentSource",
+    o.carrier_code AS "carrierCode",o.tracking_number AS "trackingNumber",o.purchase_reference AS "purchaseReference",
+    o.delivery_point AS "deliveryPoint",o.logistics_updated_at AS "logisticsUpdatedAt",
     o.delivery_fee_minor::text AS "deliveryFeeMinor",
     o.delivery_address AS address,o.buyer_note AS note,
     o.created_at AS "createdAt",o.updated_at AS "updatedAt",
@@ -31,16 +34,19 @@ export async function GET(req:NextRequest,{params}:Ctx){
     FROM shop_orders o JOIN shop_customers c ON c.id=o.customer_id
     WHERE o.id=$1`,[id]);
   if(!result.rowCount)return NextResponse.json({error:"Заказ не найден."},{status:404});
-  const [items,history]=await Promise.all([
+  const [items,history,logisticsHistory]=await Promise.all([
    pool.query(`SELECT product_id AS id,title,variant_id AS "variantId",
      variant_selection AS selection,quantity,
      unit_price_minor::text AS "unitMinor",line_total_minor::text AS "lineMinor"
      FROM shop_order_items WHERE order_id=$1 ORDER BY id`,[id]),
    pool.query(`SELECT id::text,kind,from_status AS "fromStatus",to_status AS "toStatus",
      actor_type AS actor,note,created_at AS "createdAt"
-     FROM shop_order_events WHERE order_id=$1 ORDER BY id`,[id])
+     FROM shop_order_events WHERE order_id=$1 ORDER BY id`,[id]),
+   pool.query(`SELECT id::text,kind,from_status AS "fromStatus",to_status AS "toStatus",
+     actor_type AS actor,note,created_at AS "createdAt"
+     FROM shop_logistics_events WHERE order_id=$1 ORDER BY id`,[id])
   ]);
-  return NextResponse.json({order:{...result.rows[0],items:items.rows,history:history.rows}},
+  return NextResponse.json({order:{...result.rows[0],items:items.rows,history:history.rows,logisticsHistory:logisticsHistory.rows}},
    {headers:noStore});
  }catch(err){return failureResponse(err);}
 }
@@ -60,7 +66,8 @@ export async function PATCH(req:NextRequest,{params}:Ctx){
   const client=await getPool().connect();
   try{
    await client.query("BEGIN");
-   const current=await client.query<{status:string}>("SELECT status FROM shop_orders WHERE id=$1 FOR UPDATE",[id]);
+   const current=await client.query<{status:string;logistics_status:string;fulfillment_source:string}>(
+    "SELECT status,logistics_status,fulfillment_source FROM shop_orders WHERE id=$1 FOR UPDATE",[id]);
    if(!current.rowCount){await client.query("ROLLBACK");return NextResponse.json({error:"Заказ не найден."},{status:404});}
    const before=current.rows[0].status;
    if(!allowed[before]?.includes(next)){
@@ -81,6 +88,24 @@ export async function PATCH(req:NextRequest,{params}:Ctx){
     }
    }
    await client.query("UPDATE shop_orders SET status=$2,updated_at=NOW() WHERE id=$1",[id,next]);
+   // Trigger safe internal milestones on real administrator actions.
+   const previousLogistics=current.rows[0].logistics_status;
+   let nextLogistics=previousLogistics;
+   if(next==="cancelled")nextLogistics="cancelled";
+   else if(next==="confirmed"&&previousLogistics==="awaiting_confirmation")
+     nextLogistics=current.rows[0].fulfillment_source==="purchase_to_order"?"sourcing":"preparing";
+   else if(next==="packing"&&previousLogistics==="awaiting_confirmation")
+     nextLogistics="preparing";
+   if(nextLogistics!==previousLogistics){
+     await client.query(`UPDATE shop_orders SET logistics_status=$2,
+        logistics_updated_at=NOW() WHERE id=$1`,[id,nextLogistics]);
+     await client.query(`INSERT INTO shop_logistics_events
+       (order_id,kind,from_status,to_status,actor_type,note)
+       VALUES($1,'status_changed',$2,$3,'system',$4)`,
+       [id,previousLogistics,nextLogistics,
+        next==="cancelled"?"Логистика остановлена после отмены заказа.":
+        "Автоматически после подтверждения этапа обработки заказа."]);
+   }
    await client.query(`INSERT INTO shop_order_events
      (order_id,kind,from_status,to_status,actor_type,note)
      VALUES($1,'status_changed',$2,$3,'admin',$4)`,[id,before,next,note]);

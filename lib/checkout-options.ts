@@ -1,12 +1,13 @@
 // No payment provider is configured in Vira Shop 0.14.
 // Prices and availability must always be rechecked in the server transaction.
-export type DeliveryMethod="pickup"|"courier";
+import type {DeliveryMethod} from "@/lib/logistics";
+export type {DeliveryMethod} from "@/lib/logistics";
 export type PickupContact={recipient:string;phone:string};
 export const PAYMENT_METHOD="not_configured" as const;
 export const PAYMENT_STATUS="unpaid" as const;
 export const DELIVERY_PENDING="pending" as const;
 export function deliveryMethod(value:unknown):DeliveryMethod|null{
- return value==="pickup"||value==="courier"?value:null;
+ return value==="pickup"||value==="courier"||value==="transport"||value==="ozon_pvz"?value:null;
 }
 export function pickupContact(value:unknown):PickupContact|null{
  if(!value||typeof value!=="object"||Array.isArray(value))return null;

@@ -509,3 +509,24 @@
 .admin-order-detail-section .admin-actions button:disabled{opacity:.45}
 .admin-order-reservation{color:#687995;font-size:12px;line-height:1.6}
 @media(max-width:640px){.admin-orders-filters form{min-width:100%}.admin-order-stats{gap:6px}.admin-order-stats>div{padding:10px}.admin-order-stats strong{font-size:19px}.admin-order-modal{width:100%}.admin-order-lines>div{grid-template-columns:1fr auto;gap:6px}.admin-order-lines>div>strong:last-child{grid-column:2}.admin-orders-pages{justify-content:center}}
+
+/* Vira Shop 0.15.1: independent shipping workflow */
+.admin-logistics-section{background:#f9fbff;border:1px solid #e3eaf7;border-radius:13px;padding:16px;margin:10px 0 18px}
+.admin-logistics-section h3{margin:6px 0 13px}
+.admin-logistics-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:7px 0}
+.admin-logistics-status strong{background:#e4edff;color:#2458b4;border-radius:100px;padding:7px 12px;font-size:12px}
+.admin-logistics-status span{color:#697d9b;font-size:12px}
+.admin-logistics-hint{font-size:11px;line-height:1.65;color:#697b98}
+.admin-logistics-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin:18px 0}
+.admin-logistics-fields label,.admin-logistics-note{display:flex;flex-direction:column;gap:7px;font-size:11px;font-weight:750;color:#53688a;min-width:0}
+.admin-logistics-fields label.full{grid-column:1/-1}
+.admin-logistics-fields select,.admin-logistics-fields input,.admin-logistics-note textarea{width:100%;min-width:0;border-radius:9px;border:1px solid #d3e0f1;padding:10px 12px;background:#fff;color:#273f63;font-size:12px}
+.admin-logistics-fields input:disabled,.admin-logistics-fields select:disabled{background:#f2f5fa;color:#8090a5}
+.admin-logistics-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 24px}
+.admin-logistics-actions button{border:1px solid #cadbfa;background:#eaf2ff;color:#2a60bd;padding:10px 13px;border-radius:9px;font-size:11px;font-weight:750}
+.admin-logistics-actions button:first-child{background:#2769ed;color:#fff;border-color:#2769ed}
+.admin-logistics-actions button:disabled{opacity:.42;cursor:not-allowed}
+.admin-order-attention{color:#bc5314!important;font-weight:800;background:#fff1df;padding:5px 7px;border-radius:7px}
+.checkout-delivery-methods>label.is-unavailable{background:#f8faff;border-style:dashed;opacity:.77;cursor:default}
+.checkout-delivery-methods>label.is-unavailable strong{color:#697c97}
+@media(max-width:620px){.admin-logistics-fields{grid-template-columns:1fr}.admin-logistics-section{padding:11px}.admin-logistics-fields label.full{grid-column:auto}}
