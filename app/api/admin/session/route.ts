@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
     }
     await client.query("UPDATE shop_admins SET failed_attempts = 0, locked_until = NULL WHERE id = $1", [admin.id]);
     await client.query("COMMIT");
+    client.release(); // Release embedded DB transaction before making another pooled query.
     const token = await createSession(admin.id);
     const response = NextResponse.json({ authenticated: true }, { headers: noCache });
     setSessionCookie(response, token);

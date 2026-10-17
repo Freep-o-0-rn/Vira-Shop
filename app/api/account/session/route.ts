@@ -31,6 +31,7 @@ export async function POST(req:NextRequest){
   }
   await client.query("UPDATE shop_customers SET failed_attempts=0,locked_until=NULL WHERE id=$1",[customer.id]);
   await client.query("COMMIT");
+  client.release(); // One-connection embedded DB must not be held when creating a session.
   const token=await createCustomerSession(customer.id);
   const res=NextResponse.json({customer:{id:customer.id,email:customer.email,name:customer.name}},{headers:noStore});
   setCustomerCookie(res,token);
