@@ -10,7 +10,7 @@ export async function GET(req:NextRequest){
   const q=(url.get("q")||"").trim(),status=url.get("status")||"all";
   const pageRaw=url.get("page")??"1",limitRaw=url.get("limit")??"100";
   if(q.length>100||!["all","new","confirmed","packing","shipped","completed","cancelled"].includes(status)||
-     !/^\\d{1,6}$/.test(pageRaw)||!/^\\d{1,3}$/.test(limitRaw)){
+     !/^\d{1,6}$/.test(pageRaw)||!/^\d{1,3}$/.test(limitRaw)){
     return NextResponse.json({error:"Некорректные параметры поиска."},{status:400});
   }
   const page=Number(pageRaw),limit=Number(limitRaw);
