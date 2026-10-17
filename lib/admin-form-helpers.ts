@@ -108,7 +108,15 @@ function matchesPhrase(words:string[],phrase:string):boolean {
 export function suggestCategoryEmoji(title:string):string {
   const words=normalizeCategoryTitle(title).split(" ").filter(Boolean);
   if(!words.length)return "📦";
-  return EMOJI_RULES.find(rule=>rule.phrases.some(phrase=>matchesPhrase(words,phrase)))?.emoji??"📦";
+  let bestEmoji="📦",bestScore=0;
+  for(const rule of EMOJI_RULES)for(const phrase of rule.phrases){
+    if(!matchesPhrase(words,phrase))continue;
+    const tokens=normalizeCategoryTitle(phrase).split(" ");
+    // Longer, more specific phrases win: "молочные продукты" over "продукты".
+    const score=tokens.length*100 + tokens.join("").length;
+    if(score>bestScore){bestScore=score;bestEmoji=rule.emoji;}
+  }
+  return bestEmoji;
 }
 
 export type Specification={name:string;value:string};
