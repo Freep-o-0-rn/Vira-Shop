@@ -6,6 +6,25 @@ import { categories as demoCategories, products as demoProducts, rub, type Categ
 type View = StorefrontView;
 type Sort = CatalogOrder;
 type Cart = Record<string, number>;
+type GuestVariantCart=Record<string,{productId:string;quantity:number}>;
+type PublicVariant={article:string;selection:{name:string;value:string}[];priceMinor:string;stock:number;images:string[];active:boolean};
+const VARIANT_KEY="vira-shop:variant-cart:v1";
+function restoreVariantCart():GuestVariantCart{
+ try{
+  const raw:unknown=JSON.parse(localStorage.getItem(VARIANT_KEY)||"{}");
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))return {};
+  const result:GuestVariantCart={};
+  for(const [article,v] of Object.entries(raw)){
+   if(!/^[0-9]{8,12}$/.test(article)||!v||typeof v!=="object"||Array.isArray(v))continue;
+   const item=v as {productId?:unknown;quantity?:unknown};
+   if(typeof item.productId==="string"&&validId(item.productId)&&typeof item.quantity==="number"&&
+      Number.isInteger(item.quantity)&&item.quantity>=1&&item.quantity<=99)
+     result[article]={productId:item.productId,quantity:item.quantity};
+  }
+  return result;
+ }catch{return {};}
+}
+
 type FacetGroup={name:string;values:{value:string;count:number}[]};
 const CART_KEY = "vira-shop:cart:v1";
 const FAVORITES_KEY = "vira-shop:favorites:v1";
@@ -84,6 +103,8 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
   const [pageLoading, setPageLoading] = useState(false);
   const [pageError, setPageError] = useState("");
   const [cart, setCart] = useState<Cart>({});
+  const [variantCart,setVariantCart]=useState<GuestVariantCart>({});
+  const [variantDefinitions,setVariantDefinitions]=useState<Record<string,PublicVariant[]>>({});
   const [favorites, setFavorites] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
   const restoreLocation=useCallback(()=>{
@@ -108,7 +129,7 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
     window.addEventListener("popstate",restoreLocation);
     return ()=>window.removeEventListener("popstate",restoreLocation);
   },[restoreLocation]);
-  useEffect(() => { setCart(restoreCart()); setFavorites(restoreFavorites()); setReady(true); }, []);
+  useEffect(() => { setCart(restoreCart());setVariantCart(restoreVariantCart()); setFavorites(restoreFavorites()); setReady(true); }, []);
   useEffect(() => {
     let cancelled = false;
     async function loadHome() {
@@ -194,7 +215,24 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
   },[urlReady,view,category,query,appliedMin,appliedMax,inStock]);
   useEffect(() => { if (ready) { try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch {} } }, [cart, ready]);
   useEffect(() => { if (ready) { try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites)); } catch {} } }, [favorites, ready]);
-  const savedIds=useMemo(()=>[...new Set([...Object.keys(cart),...favorites])].filter(validId).slice(0,100),[cart,favorites]);
+  useEffect(()=>{if(ready){try{localStorage.setItem(VARIANT_KEY,JSON.stringify(variantCart));}catch{}}},[variantCart,ready]);
+  const variantParents=useMemo(()=>[...new Set(Object.values(variantCart).map(x=>x.productId))].filter(validId),[variantCart]);
+  const variantParentKey=variantParents.join(",");
+  useEffect(()=>{
+    if(!ready||!variantParentKey){setVariantDefinitions({});return;}
+    const controller=new AbortController();
+    void Promise.all(variantParentKey.split(",").map(async id=>{
+      const r=await fetch("/api/products/"+encodeURIComponent(id)+"/variants",{signal:controller.signal,cache:"no-store"});
+      if(!r.ok)return {id,variants:[]};
+      const data=await r.json() as {variants:PublicVariant[]};
+      return {id,variants:data.variants};
+    })).then(items=>{
+      if(!controller.signal.aborted)setVariantDefinitions(Object.fromEntries(items.map(x=>[x.id,x.variants])));
+    }).catch(e=>{if(!controller.signal.aborted)console.error("Variant cart:",e);});
+    return ()=>controller.abort();
+  },[variantParentKey,ready]);
+
+  const savedIds=useMemo(()=>[...new Set([...Object.keys(cart),...favorites,...variantParents])].filter(validId).slice(0,100),[cart,favorites,variantParents]);
   const savedKey=savedIds.join(",");
   useEffect(()=>{
     if(!ready){return;}
@@ -244,8 +282,25 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
   const toggleLike=(id:string)=>setFavorites(old=>old.includes(id)?old.filter(x=>x!==id):[...old,id]);
   const cartItems=savedIds.flatMap(id=>{const p=byId.get(id);return p && (cart[id]||0)>0?[p]:[]});
   const favoritesItems=favorites.flatMap(id=>{const p=byId.get(id);return p?[p]:[]});
-  const cartCount=Object.values(cart).reduce((sum,n)=>sum+n,0);
-  const total=cartItems.reduce((sum,p)=>sum+p.price*cart[p.id],0);
+  const variantItems=Object.entries(variantCart).flatMap(([article,item])=>{
+    const p=byId.get(item.productId);
+    const v=variantDefinitions[item.productId]?.find(v=>v.article===article);
+    return p?[{article,product:p,variant:v,quantity:item.quantity}]:[];
+  });
+  const cartCount=Object.values(cart).reduce((sum,n)=>sum+n,0)+
+    Object.values(variantCart).reduce((sum,v)=>sum+v.quantity,0);
+  const total=cartItems.reduce((sum,p)=>sum+p.price*cart[p.id],0)+
+    variantItems.reduce((sum,v)=>sum+(v.variant?Number(v.variant.priceMinor)/100:0)*v.quantity,0);
+  const changeVariant=(article:string,delta:number)=>{
+    setVariantCart(current=>{
+      const row=current[article];if(!row)return current;
+      const max=variantDefinitions[row.productId]?.find(v=>v.article===article)?.stock??99;
+      const next=Math.min(row.quantity+delta,Math.min(max,99));
+      if(next===row.quantity)return current;
+      if(next<=0){const result={...current};delete result[article];return result;}
+      return {...current,[article]:{...row,quantity:next}};
+    });
+  };
   const resetFilters=()=>catalogNavigate({},true);
   const toggleSpec=(item:ProductSpec)=>{
     const key=specFilterKey(item);
@@ -378,7 +433,26 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
         {favoritesItems.length ? renderProducts(favoritesItems) : <div className="empty-panel"><span>♡</span><h2>Пока ничего нет</h2><p>Нажимайте сердечко на карточках товаров.</p><button onClick={() => openCategory("all")}>Перейти в каталог</button><p><a href="/checkout" className="buyer-link">Открыть серверную корзину →</a></p></div>}
       </section>}
       {view === "cart" && <section className="inner-page"><div className="page-heading"><div><span className="kicker">ВАШИ ПОКУПКИ</span><h1>Корзина</h1><p>Соберите товары в одном месте</p></div><span className="count-label">{cartCount} шт.</span></div>
-        {cartItems.length ? <div className="cart-layout"><div className="cart-list">{cartItems.map((p) => <div className="cart-row" key={p.id}><img src={p.image} alt={p.title}/><div className="cart-description"><strong>{p.title}</strong><small>{p.subtitle}</small><button type="button" className="remove-link" onClick={() => setCart((old) => { const next = { ...old }; delete next[p.id]; return next; })}>Удалить</button></div><div className="cart-controls"><div><button onClick={() => subtract(p.id)} aria-label={"Уменьшить количество " + p.title}>−</button><span>{cart[p.id]}</span><button onClick={() => add(p.id)} aria-label={"Увеличить количество " + p.title}>+</button></div><strong>{rub(p.price * cart[p.id])}</strong></div></div>)}</div>
+        {cartItems.length||variantItems.length ? <div className="cart-layout"><div className="cart-list">{cartItems.map((p) => <div className="cart-row" key={p.id}><img src={p.image} alt={p.title}/><div className="cart-description"><strong>{p.title}</strong><small>{p.subtitle}</small><button type="button" className="remove-link" onClick={() => setCart((old) => { const next = { ...old }; delete next[p.id]; return next; })}>Удалить</button></div><div className="cart-controls"><div><button onClick={() => subtract(p.id)} aria-label={"Уменьшить количество " + p.title}>−</button><span>{cart[p.id]}</span><button onClick={() => add(p.id)} aria-label={"Увеличить количество " + p.title}>+</button></div><strong>{rub(p.price * cart[p.id])}</strong></div></div>)}
+          {variantItems.map(({article,product,variant,quantity})=><div className="cart-row" key={"v:"+article}>
+            {variant?.images?.[0]||product.image?<img src={variant?.images?.[0]||product.image} alt={product.title}/>:<span>📦</span>}
+            <div className="cart-description">
+              <a href={"/product/"+encodeURIComponent(product.id)}><strong>{product.title}</strong></a>
+              <small>{variant?.selection?.map(s=>s.name+": "+s.value).join(" · ")??"Артикул "+article}</small>
+              <small>Артикул: {article}</small>
+              {!variant&&<small style={{color:"#c0394f"}}>Вариант больше недоступен. Уберите его из корзины.</small>}
+              <button type="button" className="remove-link" onClick={()=>setVariantCart(current=>{
+                const next={...current};delete next[article];return next;
+              })}>Удалить</button>
+            </div>
+            <div className="cart-controls">
+              <div><button onClick={()=>changeVariant(article,-1)} aria-label={"Уменьшить "+article}>−</button>
+                <span>{quantity}</span>
+                <button disabled={!variant||quantity>=variant.stock} onClick={()=>changeVariant(article,1)}
+                  aria-label={"Увеличить "+article}>+</button></div>
+              <strong>{variant?rub(Number(variant.priceMinor)/100*quantity):"Недоступен"}</strong>
+            </div>
+          </div>)}</div>
           <aside className="cart-summary"><h2>Ваш заказ</h2><div><span>Товаров: {cartCount}</span><strong>{rub(total)}</strong></div><div className="summary-total"><span>Предварительно</span><strong>{rub(total)}</strong></div><button type="button" onClick={()=>window.location.assign("/checkout")}>Перейти к оформлению</button><p>Расчёт предварительный. Цена и наличие проверяются сервером. Оплата отключена.</p></aside></div>
           : <div className="empty-panel"><span>🛒</span><h2>Корзина пуста</h2><p>Добавьте товары из каталога, чтобы увидеть их здесь.</p><button onClick={() => openCategory("all")}>Перейти в каталог</button></div>}
       </section>}
