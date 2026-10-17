@@ -41,13 +41,18 @@ try {
     }
     else {
         $nextPackage = Join-Path $projectRoot "node_modules\next\package.json"
-        if (-not (Test-Path -LiteralPath $nextPackage)) {
+        $manifest = Join-Path $projectRoot "package.json"
+        $hashStamp = Join-Path $projectRoot ".vira-deps.hash"
+        $desiredHash = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash
+        $installedHash = if (Test-Path -LiteralPath $hashStamp) { (Get-Content -LiteralPath $hashStamp -Raw).Trim() } else { "" }
+        if (-not (Test-Path -LiteralPath $nextPackage) -or $installedHash -ne $desiredHash) {
             Write-Host ""
-            Write-Host "Installing dependencies (first launch)..." -ForegroundColor Cyan
+            Write-Host "Installing or updating project dependencies..." -ForegroundColor Cyan
             & npm.cmd install --no-audit --no-fund
             if ($LASTEXITCODE -ne 0) {
                 throw "npm install failed (exit code $LASTEXITCODE). Check the messages above and vira-startup.log."
             }
+            Set-Content -LiteralPath $hashStamp -Value $desiredHash -NoNewline -Encoding ASCII
         }
 
         Write-Host ""

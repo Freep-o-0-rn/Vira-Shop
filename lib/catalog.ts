@@ -1,7 +1,8 @@
 // Демонстрационные данные. Цены, скидки, наличие и отзывы вымышлены.
-export type Category = "electronics" | "home" | "beauty" | "sports" | "accessories";
-export type Product = { id: string; title: string; subtitle: string; category: Category; price: number; oldPrice?: number; rating: number; reviews: number; image: string; badge?: string; description: string };
-export const categories: { id: Category; title: string; emoji: string; tone: string }[] = [
+export type Category = string;
+export type Product = { id: string; title: string; subtitle: string; category: Category; price: number; oldPrice?: number; rating: number; reviews: number; image: string; badge?: string; description: string; stock?: number };
+export type StoreCategory = { id: Category; title: string; emoji: string; tone: string };
+export const categories: StoreCategory[] = [
   { id: "electronics", title: "Электроника", emoji: "🎧", tone: "blue" },
   { id: "home", title: "Дом и уют", emoji: "🛋️", tone: "peach" },
   { id: "beauty", title: "Красота", emoji: "🧴", tone: "pink" },

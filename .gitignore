@@ -27,3 +27,6 @@ out/
 !.env.example
 *.tsbuildinfo
 .DS_Store
+
+# Local npm installation marker
+.vira-deps.hash
