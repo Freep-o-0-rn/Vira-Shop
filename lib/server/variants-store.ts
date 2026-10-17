@@ -36,7 +36,7 @@ export function validateVariantConfig(value:unknown):{groups:VariantGroup[];vari
    const image=item.image===undefined||item.image===""?undefined:item.image;
    if(color!==undefined&&(typeof color!=="string"||!/^#[0-9a-fA-F]{6}$/.test(color)))return null;
    if(image!==undefined&&(typeof image!=="string"||!urlOK(image)))return null;
-   values.push({label,...color?{color},...image?{image}:{}});
+   values.push({label,...(color?{color}:{}),...(image?{image}:{})});
   }
   groups.push({name,type:type as VariantGroup["type"],values});
  }
