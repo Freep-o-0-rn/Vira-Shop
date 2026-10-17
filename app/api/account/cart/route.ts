@@ -20,21 +20,31 @@ export async function PUT(req:NextRequest){
  try{
   const a=await customerGuard(req,true);if(a.response)return a.response;
   let body:Record<string,unknown>|null;try{body=object(await jsonBody(req));}catch{return bad("Некорректный запрос.");}
-  if(!body || !validProduct(body.productId) || !qty(body.quantity))return bad("Некорректные параметры корзины.");
-  const id=body.productId,q=body.quantity,db=getPool();
-  if(q===0){
-   await db.query("DELETE FROM shop_customer_cart WHERE customer_id=$1 AND product_id=$2",[a.customer!.id,id]);
-  }else{
-   const p=await db.query<{stock_count:number}>(`SELECT p.stock_count FROM shop_products p
-     JOIN shop_categories c ON c.id=p.category_id WHERE p.id=$1 AND p.is_active AND c.is_active`,[id]);
-   if(!p.rowCount)return bad("Товар недоступен.",409);
-   if(p.rows[0].stock_count<q)return bad("Недостаточно товара на складе.",409);
-   await db.query(`INSERT INTO shop_customer_cart(customer_id,product_id,quantity)
+  if(!body||!validProduct(body.productId)||!qty(body.quantity))return bad("Некорректные параметры корзины.");
+  const id=body.productId,q=body.quantity;
+  const client=await getPool().connect();
+  try{
+   await client.query("BEGIN");
+   // Serialize edits with the customer's checkout and local-cart merge.
+   await client.query("SELECT id FROM shop_customers WHERE id=$1 FOR UPDATE",[a.customer!.id]);
+   if(q===0){
+    await client.query("DELETE FROM shop_customer_cart WHERE customer_id=$1 AND product_id=$2",[a.customer!.id,id]);
+   }else{
+    const p=await client.query<{stock_count:number}>(`SELECT p.stock_count FROM shop_products p
+      JOIN shop_categories c ON c.id=p.category_id WHERE p.id=$1 AND p.is_active AND c.is_active`,[id]);
+    if(!p.rowCount){await client.query("ROLLBACK");return bad("Товар недоступен.",409);}
+    if(p.rows[0].stock_count<q){await client.query("ROLLBACK");return bad("Недостаточно товара на складе.",409);}
+    await client.query(`INSERT INTO shop_customer_cart(customer_id,product_id,quantity)
       VALUES($1,$2,$3) ON CONFLICT(customer_id,product_id)
       DO UPDATE SET quantity=EXCLUDED.quantity,updated_at=NOW()`,[a.customer!.id,id,q]);
-  }
-  const rows=await db.query(SELECT,[a.customer!.id]);
-  return NextResponse.json({items:rows.rows},{headers:noStore});
+   }
+   const count=await client.query<{n:number}>("SELECT COUNT(*)::int n FROM shop_customer_cart WHERE customer_id=$1",[a.customer!.id]);
+   if(count.rows[0].n>50){await client.query("ROLLBACK");return bad("Не более 50 позиций в корзине.",409);}
+   const result=await client.query(SELECT,[a.customer!.id]);
+   await client.query("COMMIT");
+   return NextResponse.json({items:result.rows},{headers:noStore});
+  }catch(err){try{await client.query("ROLLBACK");}catch{}throw err;}
+  finally{client.release();}
  }catch(err){return publicError(err);}
 }
 export async function POST(req:NextRequest){
