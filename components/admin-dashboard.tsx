@@ -3,6 +3,9 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {EMOJI_CHOICES,suggestCategoryEmoji,suggestedSpecs,fillMissingSpecs,type Specification} from "@/lib/admin-form-helpers";
 import dynamic from "next/dynamic";
 import AdminImageManager from "@/components/admin-image-manager";
+const AdminOrdersPanel=dynamic(()=>import("@/components/admin-orders-panel"),{
+ ssr:false,loading:()=> <p className="admin-help">Открываем управление заказами…</p>
+});
 const AdminVariantsEditor=dynamic(()=>import("@/components/admin-variants-editor"),{
  ssr:false,loading:()=> <p role="status">Открываем варианты…</p>
 });
@@ -12,10 +15,6 @@ const FullEmojiPicker=dynamic(()=>import("@/components/admin-emoji-picker"),{
   loading:()=> <p className="admin-emoji-loading" role="status">Загружаем эмодзи…</p>
 });
 
-type AdminOrder={id:string;status:string;paymentStatus:string;paymentMethod:string;deliveryMethod:"pickup"|"courier";deliveryFeeMinor:string|null;subtotalMinor:string;totalMinor:string;address:{recipient:string;phone:string;city:string;street:string;building:string;apartment:string};note:string;createdAt:string;customerName:string;customerEmail:string;items:{id:string;title:string;quantity:number;lineMinor:string;variantId:string|null;selection:{name:string;value:string}[]}[]};
-const labels:Record<string,string>={new:"Новый",confirmed:"Подтверждён",packing:"Сборка",shipped:"Отправлен",completed:"Завершён",cancelled:"Отменён"};
-const nextSteps:Record<string,string[]>={new:["confirmed","cancelled"],confirmed:["packing","cancelled"],packing:["shipped","cancelled"],shipped:["completed"],completed:[],cancelled:[]};
-const moneyMinor=(amount:string)=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB"}).format(Number(amount)/100);
 type Category = { id: string; title: string; emoji: string; tone: string; active: boolean; productCount: number };
 type Product = {
   id: string; category: string; title: string; subtitle: string; description: string;
@@ -38,7 +37,6 @@ async function api<T = unknown>(url: string, init?: RequestInit): Promise<T> {
 export default function AdminDashboard({login}:{login:string}) {
   const [tab,setTab]=useState<"products"|"categories"|"orders">("products");
   const [products,setProducts]=useState<Product[]>([]);
-  const [orders,setOrders]=useState<AdminOrder[]>([]);
   const [categories,setCategories]=useState<Category[]>([]);
   const [pending,setPending]=useState(false);
   const [imageUploading,setImageUploading]=useState(false);
@@ -59,12 +57,11 @@ export default function AdminDashboard({login}:{login:string}) {
   const [bulkStock,setBulkStock]=useState("");
   const [variantProduct,setVariantProduct]=useState<Product|null>(null);
   const refresh=useCallback(async()=>{
-    const [p,c,o]=await Promise.all([
+    const [p,c]=await Promise.all([
       api<{items:Product[]}>("/api/admin/products"),
-      api<{items:Category[]}>("/api/admin/categories"),
-      api<{items:AdminOrder[]}>("/api/admin/orders")
+      api<{items:Category[]}>("/api/admin/categories")
     ]);
-    setProducts(p.items);setCategories(c.items);setOrders(o.items);
+    setProducts(p.items);setCategories(c.items);
   },[]);
   useEffect(()=>{
     let active=true;
@@ -169,17 +166,6 @@ export default function AdminDashboard({login}:{login:string}) {
     setPending(true);setError("");setSuccess("");
     try{await api("/api/admin/categories/"+encodeURIComponent(c.id),{method:"DELETE"});await refresh();notice("Категория удалена.");}
     catch(e){setError(e instanceof Error?e.message:"Ошибка удаления.");}finally{setPending(false);}
-  }
-  async function changeOrderStatus(order:AdminOrder,status:string){
-    if(status==="cancelled"&&!confirm("Отменить заказ № "+order.id+" и вернуть товары на склад?"))return;
-    setPending(true);setError("");setSuccess("");
-    try{
-      await api("/api/admin/orders/"+order.id,{
-        method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})
-      });
-      await refresh();notice("Статус заказа № "+order.id+" обновлён.");
-    }catch(e){setError(e instanceof Error?e.message:"Ошибка изменения статуса.");}
-    finally{setPending(false);}
   }
   async function logout(){
     try{await api("/api/admin/session",{method:"DELETE"});window.location.assign("/admin/login");}
@@ -312,30 +298,7 @@ export default function AdminDashboard({login}:{login:string}) {
           </div>
         </>}
         {tab==="categories"&&<div className="admin-panel"><h2>Категории</h2><div className="admin-category-list">{categories.map(c=><div className="admin-category-item" key={c.id}><div className="admin-category-icon">{c.emoji||"📦"}</div><div><strong>{c.title}</strong><small>{c.id} · товаров: {c.productCount} · {c.active?"активна":"скрыта"}</small></div><div className="admin-actions"><button disabled={pending} onClick={()=>editCategory(c)}>Изменить</button><button disabled={pending||c.productCount>0} title={c.productCount?"Сначала перенесите товары":""} onClick={()=>void deleteCategory(c)}>Удалить</button></div></div>)}</div></div>}
-        {tab==="orders"&&<div className="admin-panel">
-          <div className="admin-toolbar"><h2>Последние заказы</h2><span>{orders.length} записей</span></div>
-          {orders.length?orders.map(order=><article className="admin-order" key={order.id}>
-            <div className="admin-order-top"><div><strong>Заявка № {order.id}</strong>
-              <small>{new Date(order.createdAt).toLocaleString("ru-RU")} · {order.customerName} ({order.customerEmail})</small></div>
-              <span className="admin-pill">{labels[order.status]||order.status}</span></div>
-            <div className="admin-order-content">
-              <div><h3>Состав</h3>{order.items.map((item,i)=><p key={i}>{item.title}{item.variantId?" · арт. "+item.variantId:""}{item.selection?.length?" ("+item.selection.map(v=>v.value).join(" / ")+")":""} × {item.quantity} — {moneyMinor(item.lineMinor)}</p>)}
-                <strong>{order.deliveryMethod==="courier"?"Товары: ":"Итого: "}{moneyMinor(order.totalMinor)}</strong>
-                <p>Доставка: {order.deliveryFeeMinor===null?"стоимость не рассчитана":moneyMinor(order.deliveryFeeMinor)}</p>
-                <p>Оплата: не подключена; средства не списаны</p></div>
-              <div><h3>{order.deliveryMethod==="pickup"?"Самовывоз":"Доставка по адресу"}</h3>
-                <p>{order.address.recipient}, {order.address.phone}</p>
-                {order.deliveryMethod==="courier"?
-                   <p>{order.address.city}, {order.address.street}, д. {order.address.building}{order.address.apartment?", кв. "+order.address.apartment:""}</p>:
-                   <p>Пункт и время выдачи необходимо согласовать с покупателем.</p>}
-                {order.note&&<p>Комментарий: {order.note}</p>}</div>
-            </div><div className="admin-actions">
-              {(nextSteps[order.status]||[]).map(status=>
-                <button type="button" key={status} disabled={pending} onClick={()=>void changeOrderStatus(order,status)}>
-                  {status==="cancelled"?"Отменить / вернуть остатки":"Перевести: "+labels[status]}</button>)}
-            </div>
-          </article>):<p className="admin-help">Новых заказов пока нет.</p>}
-        </div>}
+        {tab==="orders"&&<AdminOrdersPanel onChanged={refresh}/>}
       </>}
     </section>
     {variantProduct&&<AdminVariantsEditor key={variantProduct.id}

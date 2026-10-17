@@ -51,6 +51,8 @@ jobs:
           timeout 120s node scripts/smoke-inventory.mjs || (cat /tmp/vira-server.log && exit 1)
           echo "Testing fulfillment and payment-disabled checkout"
           timeout 120s node scripts/smoke-fulfillment.mjs || (cat /tmp/vira-server.log && exit 1)
+          echo "Testing order management audit trail and concurrent cancellations"
+          timeout 120s node scripts/smoke-orders-workflow.mjs || (cat /tmp/vira-server.log && exit 1)
 
   windows-launcher:
     runs-on: windows-latest

@@ -450,3 +450,62 @@
 .checkout-unquoted{margin:7px 0 16px;font-size:11px;color:#9b661e;background:#fff9ed;border:1px solid #fae6c3;border-radius:9px;padding:11px;line-height:1.65}
 .order-delivery-description{font-size:12px;line-height:1.7;color:#64738b}
 @media(max-width:600px){.checkout-delivery-methods>label{padding:11px}.checkout-delivery-line strong{max-width:55%}}
+
+
+/* Vira Shop 0.15: order management, dedicated order detail, event history */
+.admin-orders-workspace{display:flex;flex-direction:column;gap:15px;min-width:0}
+.admin-orders-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.admin-orders-toolbar h2{font-size:19px;margin:0;color:#233557}
+.admin-orders-toolbar p{font-size:12px;margin:5px 0 0;color:#8190a7;line-height:1.5}
+.admin-orders-toolbar>button,.admin-orders-pages button{border:1px solid #d9e4f5;border-radius:9px;padding:10px 13px;background:#fff;color:#3362ad;font-size:12px;font-weight:800}
+.admin-order-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.admin-order-stats>div{border:1px solid #e5ebf5;border-radius:12px;background:#fff;padding:17px 18px;display:flex;flex-direction:column;gap:5px}
+.admin-order-stats strong{font-size:24px;font-weight:850;color:#234bc0}
+.admin-order-stats span{font-size:11px;color:#8290a7}
+.admin-orders-filters{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;background:#fff;border:1px solid #e5ebf5;border-radius:12px;padding:16px}
+.admin-orders-filters form{flex:3;min-width:250px}
+.admin-orders-filters label{display:flex;flex-direction:column;gap:7px;font-size:11px;color:#637591;font-weight:750;flex:1;min-width:150px}
+.admin-orders-filters form>div{display:flex;gap:7px}
+.admin-orders-filters input,.admin-orders-filters select{min-width:0;width:100%;height:41px;padding:9px 12px;border:1px solid #d8e2f1;border-radius:9px;background:#fff;color:#283b61}
+.admin-orders-filters form button{white-space:nowrap;border:0;background:#2668eb;color:#fff;padding:9px 16px;border-radius:9px;font-size:12px;font-weight:800}
+.admin-orders-filters form .admin-order-clear{color:#47618b;background:#edf2fa}
+.admin-orders-table-wrap{background:#fff;border:1px solid #e5ebf5;border-radius:12px;overflow:auto}
+.admin-orders-table{width:100%;min-width:760px}
+.admin-orders-table td{vertical-align:middle}
+.admin-orders-table td small{display:block;font-size:11px;color:#8999b1;margin-top:6px}
+.admin-orders-table td strong{font-size:12px}
+.admin-order-details-button{white-space:nowrap;border:1px solid #cfdcf7;border-radius:8px;background:#f2f6ff;color:#2861cf;padding:9px 11px;font-size:11px;font-weight:800}
+.admin-order-status{font-size:11px;font-weight:850;white-space:nowrap;border-radius:100px;padding:6px 11px;display:inline-flex;background:#edf2fc;color:#56739a}
+.admin-order-status.status-new{background:#e8f1ff;color:#2460bf}
+.admin-order-status.status-confirmed{background:#f2eaff;color:#7145ab}
+.admin-order-status.status-packing{background:#fff1dd;color:#946117}
+.admin-order-status.status-shipped{background:#e3f5ff;color:#236f98}
+.admin-order-status.status-completed{background:#e4f9e9;color:#207947}
+.admin-order-status.status-cancelled{background:#fff0f0;color:#bd4150}
+.admin-orders-pages{display:flex;gap:13px;align-items:center;justify-content:flex-end;font-size:12px;color:#6c7b93}
+.admin-orders-pages button:disabled{opacity:.4;cursor:default}
+.admin-order-modal{max-width:850px;width:min(850px,95vw)}
+.admin-order-summary{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:11px;color:#7889a4;margin:4px 0 16px}
+.admin-order-detail-section{padding:17px 0;border-top:1px solid #e8edf5}
+.admin-order-detail-section h3{font-size:14px;color:#263955;margin:0 0 13px}
+.admin-order-detail-section p{font-size:12px;line-height:1.7;margin:6px 0;color:#5b6d88}
+.admin-order-lines{display:flex;flex-direction:column;gap:7px;margin-bottom:14px}
+.admin-order-lines>div{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:15px;align-items:center;border-radius:9px;padding:12px;background:#f8faff}
+.admin-order-lines strong{font-size:12px}
+.admin-order-lines small{font-size:10px;display:block;color:#8695aa;margin-top:5px}
+.admin-order-lines span{font-size:11px;color:#71819c;white-space:nowrap}
+.admin-order-total{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;margin-top:11px}
+.admin-order-history{list-style:none;margin:0;padding:0 0 0 11px;border-left:2px solid #d6e4ff}
+.admin-order-history li{position:relative;margin:0 0 18px;padding:0 0 0 16px}
+.admin-order-history li:before{content:"";position:absolute;left:-17px;top:4px;width:9px;height:9px;border-radius:50%;background:#4181ff;box-shadow:0 0 0 3px #e9f1ff}
+.admin-order-history li strong{display:block;font-size:12px}
+.admin-order-history li small{display:block;font-size:10px;color:#8a9ab0;margin-top:6px}
+.admin-order-history li p{margin-top:7px}
+.admin-order-note{display:flex;flex-direction:column;gap:8px;color:#536b91;font-size:12px;font-weight:750}
+.admin-order-note textarea{width:100%;border:1px solid #d9e5f5;border-radius:9px;padding:11px;color:#263955;background:#fff}
+.admin-order-detail-section .admin-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+.admin-order-detail-section .admin-actions button{font-size:12px;font-weight:750;padding:10px 14px;border:1px solid #c9dcfc;border-radius:8px;background:#edf4ff;color:#2b61bf}
+.admin-order-detail-section .admin-actions button.admin-order-cancel{border-color:#f0cbd0;background:#fff0f2;color:#b24056}
+.admin-order-detail-section .admin-actions button:disabled{opacity:.45}
+.admin-order-reservation{color:#687995;font-size:12px;line-height:1.6}
+@media(max-width:640px){.admin-orders-filters form{min-width:100%}.admin-order-stats{gap:6px}.admin-order-stats>div{padding:10px}.admin-order-stats strong{font-size:19px}.admin-order-modal{width:100%}.admin-order-lines>div{grid-template-columns:1fr auto;gap:6px}.admin-order-lines>div>strong:last-child{grid-column:2}.admin-orders-pages{justify-content:center}}

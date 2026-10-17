@@ -114,6 +114,9 @@ export async function POST(req:NextRequest){
      await client.query(`INSERT INTO shop_order_items(order_id,product_id,title,quantity,unit_price_minor,line_total_minor,variant_id,variant_selection)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,[order.rows[0].id,p.id,p.title,p.quantity,p.priceMinor,p.priceMinor*p.quantity,p.variantId,JSON.stringify(p.selection)]);
    }
+   await client.query(`INSERT INTO shop_order_events
+     (order_id,kind,to_status,actor_type,note)
+     VALUES($1,'created','new','customer','Заявка создана покупателем.')`,[order.rows[0].id]);
    await client.query("DELETE FROM shop_customer_cart WHERE customer_id=$1",[a.customer!.id]);
    await client.query("COMMIT");
    return NextResponse.json({id:order.rows[0].id,totalMinor:String(total),
