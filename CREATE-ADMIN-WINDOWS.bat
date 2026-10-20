@@ -1,6 +1,5 @@
 @echo off
 setlocal EnableExtensions
-chcp 65001 >nul
 cd /d "%~dp0"
 title Vira Shop - Admin Password Reset
 echo.
@@ -14,7 +13,9 @@ echo.
 echo Close START-WINDOWS.bat before creating or updating the admin.
 echo When typing the password, the characters WILL be visible.
 echo.
-where node >nul 2>nul
+where powershell.exe >nul 2>nul
+if errorlevel 1 goto :failed
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\start-windows.ps1" -CheckOnly
 if errorlevel 1 goto :failed
 call npm run db:setup
 if errorlevel 1 goto :failed

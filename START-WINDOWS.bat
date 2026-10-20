@@ -1,6 +1,5 @@
 @echo off
 setlocal EnableExtensions
-chcp 65001 >nul
 cd /d "%~dp0"
 if errorlevel 1 goto :bad_folder
 title Vira Shop - Local Development Server

@@ -1,4 +1,18 @@
-# Vira Shop 0.15.1 — логистика, закупка под заказ и основа выбора ПВЗ Ozon
+# Vira Shop 0.15.2 — Windows startup diagnostics
+
+**Important:** requires Windows 10/11 x64, Node.js 22+ and Windows PowerShell 5.1.
+On Windows 7/8/8.1 the current Next.js 16 application cannot run; the launchers
+now report that limitation before trying to install anything. Missing Node.js
+or npm is also shown as a clear error.
+
+See [WINDOWS-SETUP.md](WINDOWS-SETUP.md) for `winver` and `node/npm`
+diagnostics. The starter now avoids `$PSScriptRoot` for legacy PowerShell,
+and setup/admin scripts reuse the same preflight.
+
+This is a launcher-only fix; no database migration is required.
+
+---
+
 
 Платёжная система **не подключена**. Заказы оформляются как заявки без списания денег.
 
