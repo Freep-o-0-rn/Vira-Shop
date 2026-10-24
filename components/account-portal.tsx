@@ -1,5 +1,6 @@
 "use client";
 import {normalizeVerificationCode} from "@/lib/verification-code";
+import {accountOrderCounts,matchesOrderFilter,ORDER_FILTERS,orderStage,type AccountOrderFilter} from "@/lib/account-overview";
 import {formatOtpCountdown,secondsUntil} from "@/lib/otp-countdown";
 import OtpCodeInput from "@/components/otp-code-input";
 import {useEffect,useRef,useState,type FormEvent} from "react";
@@ -39,12 +40,15 @@ export default function AccountPortal(){
  const codeRemaining=secondsUntil(codeExpiresAt,clock||Date.now());
  const [addresses,setAddresses]=useState<Address[]>([]),[orders,setOrders]=useState<Order[]>([]);
  const [section,setSection]=useState<"orders"|"addresses"|"profile"|"security">("orders");
+ const [orderFilter,setOrderFilter]=useState<AccountOrderFilter>("all");
  const [addressOpen,setAddressOpen]=useState(false),[editAddressId,setEditAddressId]=useState<string|null>(null);
  const [profileName,setProfileName]=useState("");
  const [oldPassword,setOldPassword]=useState(""),[nextPassword,setNextPassword]=useState(""),[repeatPassword,setRepeatPassword]=useState("");
  const [deletionStarted,setDeletionStarted]=useState(false),[deletionCode,setDeletionCode]=useState("");
  const [deletionAgreed,setDeletionAgreed]=useState(false);
  const [address,setAddress]=useState({...EMPTY}),[error,setError]=useState(""),[notice,setNotice]=useState("");
+ const orderCounts=accountOrderCounts(orders);
+ const filteredOrders=orders.filter(o=>matchesOrderFilter(o.status,orderFilter));
  async function refresh(){
   const [session,a,o]=await Promise.all([
    api<{customer:Customer|null}>("/api/account/session"),
@@ -300,12 +304,34 @@ export default function AccountPortal(){
     </form>
    </section>:
    <>
-    <section className="buyer-profile buyer-panel"><div><h2>{customer.name}</h2><p>{customer.email}</p></div>
-      <button type="button" disabled={busy} onClick={()=>void logout()}>Выйти</button></section>
-    <nav className="buyer-tabs buyer-dashboard-tabs" aria-label="Разделы кабинета">
-     {([["orders","Мои заказы"],["addresses","Адреса"],["profile","Личные данные"],["security","Безопасность"]] as const).map(([key,label])=>
+    <section className="buyer-overview buyer-panel" aria-label="Обзор личного кабинета">
+     <div className="buyer-overview-top">
+      <span className="buyer-avatar" aria-hidden="true">{customer.name.trim().charAt(0).toLocaleUpperCase("ru-RU")||"V"}</span>
+      <div className="buyer-overview-person">
+       <span className="buyer-overview-eyebrow">Ваш аккаунт</span>
+       <h2>Здравствуйте, {customer.name}!</h2>
+       <p>{customer.email}</p>
+      </div>
+      <button className="buyer-logout" type="button" disabled={busy} onClick={()=>void logout()}>Выйти</button>
+     </div>
+     <div className="buyer-overview-stats">
+      <button type="button" className="buyer-stat" onClick={()=>{setSection("orders");setOrderFilter("active");}}>
+       <strong>{orderCounts.active}</strong><span>Заказов в работе</span>
+      </button>
+      <button type="button" className="buyer-stat" onClick={()=>{setSection("orders");setOrderFilter("completed");}}>
+       <strong>{orderCounts.completed}</strong><span>Завершено</span>
+      </button>
+      <button type="button" className="buyer-stat" onClick={()=>setSection("addresses")}>
+       <strong>{addresses.length}</strong><span>Мои адреса</span>
+      </button>
+     </div>
+    </section>
+    <nav className="buyer-tabs buyer-dashboard-tabs" aria-label="Разделы личного кабинета">
+     {([["orders","Мои заказы","📦"],["addresses","Адреса","📍"],["profile","Личные данные","👤"],["security","Безопасность","🔒"]] as const).map(([key,label,icon])=>
       <button type="button" key={key} className={section===key?"selected":""}
-       onClick={()=>{setSection(key);setError("");setNotice("");}}>{label}</button>)}
+       aria-current={section===key?"page":undefined}
+       onClick={()=>{setSection(key);setError("");setNotice("");}}>
+       <span aria-hidden="true">{icon}</span> {label}</button>)}
     </nav>
     <div className="buyer-layout buyer-layout-single">
      {section==="addresses"&&<section className="buyer-panel"><div className="buyer-panel-head"><h2>Мои адреса</h2><span>{addresses.length}</span></div>
@@ -326,30 +352,76 @@ export default function AccountPortal(){
        <button type="button" disabled={busy} onClick={()=>{setEditAddressId(null);setAddressOpen(false);}}>Отмена</button>
       </form></>}
      </section>}
-     {section==="orders"&&<section className="buyer-panel"><div className="buyer-panel-head"><h2>Мои заказы</h2>
-      <Link href="/checkout" className="buyer-link">Перейти к оформлению →</Link></div>
-      {orders.length?orders.map(o=><article className="buyer-order" key={o.id}>
-       <div className="buyer-order-head"><strong>Заказ № {o.id}</strong><span>{statuses[o.status]||o.status}</span></div>
-       <small>{new Date(o.createdAt).toLocaleString("ru-RU")} · Оплата не подключена</small>
-       <p className="order-delivery-description">
-         <strong>{DELIVERY_LABELS[o.deliveryMethod]}</strong>
-         {" · "+o.address.recipient+", "+o.address.phone}
-         {o.deliveryMethod==="pickup"?" · Точка выдачи согласуется отдельно":
-         o.deliveryMethod==="ozon_pvz"&&o.deliveryPoint?" · "+o.deliveryPoint.address:
-          " · "+[o.address.city,o.address.street,"д. "+o.address.building].filter(Boolean).join(", ")}
-       </p>
-       <p className="order-delivery-description">
-        Статус получения: <strong>{LOGISTICS_LABELS[o.logisticsStatus]??"Уточняется"}</strong>
-        {o.trackingNumber&&<span> · Трек-номер: {o.trackingNumber}</span>}
-       </p>
-       <div className="buyer-order-items">{o.items.map((i,k)=><p key={k}>{i.title}{i.variantId?" · арт. "+i.variantId:""}{i.selection?.length?" ("+i.selection.map(s=>s.value).join(" / ")+")":""} × {i.quantity} — {money(i.lineMinor)}</p>)}</div>
-       <div><strong>{o.deliveryMethod==="pickup"?"Итого: ":"Товары: "}{money(o.totalMinor)}</strong>
-         {o.deliveryFeeMinor===null?<p className="buyer-muted">Доставка: стоимость уточняется</p>:
-           <p className="buyer-muted">Самовывоз: бесплатно</p>}
-         <small>Статус оплаты: не оплачено · Платёжная система не подключена</small>
+     {section==="orders"&&<section className="buyer-panel buyer-orders-panel">
+      <div className="buyer-panel-head">
+       <div><h2>Мои заказы</h2><p className="buyer-muted">Статусы и подробности ваших покупок</p></div>
+       <span>{orders.length} всего</span>
+      </div>
+      {orders.length?<>
+       <div className="buyer-order-filters" role="group" aria-label="Фильтр заказов">
+        {ORDER_FILTERS.map(filter=>
+         <button type="button" key={filter.value} className={orderFilter===filter.value?"selected":""}
+          aria-pressed={orderFilter===filter.value} onClick={()=>setOrderFilter(filter.value)}>
+          {filter.label} <span>{orderCounts[filter.value]}</span>
+         </button>)}
        </div>
-      </article>):
-      <div className="buyer-muted"><p>Пока нет заказов.</p><Link href="/checkout" className="buyer-link">Оформить первый заказ →</Link></div>}
+       {filteredOrders.length?filteredOrders.map(o=>
+        <details className={"buyer-order-card buyer-order-"+orderStage(o.status)} key={o.id}>
+         <summary className="buyer-order-summary">
+          <span className="buyer-order-summary-main">
+           <strong>Заказ № {o.id}</strong>
+           <small>{new Date(o.createdAt).toLocaleDateString("ru-RU",{day:"numeric",month:"long",year:"numeric"})} · {o.items.reduce((n,item)=>n+item.quantity,0)} шт.</small>
+           <span className="buyer-order-logistics">{DELIVERY_LABELS[o.deliveryMethod]} · {LOGISTICS_LABELS[o.logisticsStatus]??"Статус уточняется"}</span>
+          </span>
+          <span className="buyer-order-summary-side">
+           <span className={"buyer-order-status buyer-order-status-"+orderStage(o.status)}>{statuses[o.status]||o.status}</span>
+           <strong>{money(o.totalMinor)}</strong>
+           <span className="buyer-order-expand-label">Подробнее <span aria-hidden="true">⌄</span></span>
+          </span>
+         </summary>
+         <div className="buyer-order-expanded">
+          <div className="buyer-order-detail-group">
+           <h3>Доставка</h3>
+           <p><strong>{DELIVERY_LABELS[o.deliveryMethod]}</strong></p>
+           <p>Статус: <strong>{LOGISTICS_LABELS[o.logisticsStatus]??"Уточняется"}</strong></p>
+           <p>{o.address.recipient}, {o.address.phone}</p>
+           {o.deliveryMethod==="pickup"?<p>Место самовывоза согласовывается с продавцом.</p>:
+            o.deliveryMethod==="ozon_pvz"&&o.deliveryPoint?<p>{o.deliveryPoint.name}: {o.deliveryPoint.address}</p>:
+            <p>{[o.address.city,o.address.street,o.address.building?"д. "+o.address.building:"",o.address.apartment?"кв. "+o.address.apartment:""].filter(Boolean).join(", ")}</p>}
+           {o.trackingNumber&&<p>Трек-номер: <strong className="buyer-tracking">{o.trackingNumber}</strong></p>}
+          </div>
+          <div className="buyer-order-detail-group">
+           <h3>Состав заказа</h3>
+           <div className="buyer-order-line-items">
+            {o.items.map((item,k)=><div key={k} className="buyer-order-line">
+             <span><strong>{item.title}</strong>
+              {item.variantId&&<small>Артикул: {item.variantId}</small>}
+              {!!item.selection?.length&&<small>{item.selection.map(selection=>selection.name+": "+selection.value).join(" · ")}</small>}
+              <small>{item.quantity} шт.</small></span>
+             <strong>{money(item.lineMinor)}</strong>
+            </div>)}
+           </div>
+          </div>
+          <div className="buyer-order-total">
+           <span><strong>Стоимость товаров</strong>
+            <small>{o.deliveryFeeMinor===null?"Доставка рассчитывается отдельно":"Доставка: "+money(o.deliveryFeeMinor)}</small>
+            <small>{o.paymentStatus==="paid"?"Оплачено":"Онлайн-оплата пока недоступна"}</small>
+           </span>
+           <strong>{money(o.totalMinor)}</strong>
+          </div>
+         </div>
+        </details>):
+        <div className="buyer-empty-state"><div aria-hidden="true">📦</div>
+         <h3>Заказов в этой категории пока нет</h3>
+         <p className="buyer-muted">Выберите другой фильтр, чтобы посмотреть остальные заказы.</p>
+         <button type="button" className="buyer-empty-action" onClick={()=>setOrderFilter("all")}>Показать все заказы</button>
+        </div>}
+      </>:
+       <div className="buyer-empty-state">
+        <div aria-hidden="true">🛍️</div><h3>Здесь появятся ваши покупки</h3>
+        <p className="buyer-muted">Выберите товары в каталоге, добавьте их в корзину и оформите первый заказ.</p>
+        <Link href="/catalog" className="buyer-primary">Перейти в каталог</Link>
+       </div>}
      </section>}
      {section==="profile"&&<section className="buyer-panel"><h2>Личные данные</h2>
       <form className="buyer-form" onSubmit={e=>void saveProfile(e)}>
