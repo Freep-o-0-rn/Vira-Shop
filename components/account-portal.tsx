@@ -13,6 +13,8 @@ type Order={id:string;status:string;paymentStatus:string;paymentMethod:string;
   deliveryFeeMinor:string|null;subtotalMinor:string;totalMinor:string;
   createdAt:string;address:Address;items:Item[]};
 const EMPTY={recipient:"",phone:"",city:"",street:"",building:"",apartment:"",comment:""};
+const PENDING_KEY="vira_shop_pending_signup_v1";
+type PendingSignup={email:string;resumeToken:string};
 const statuses:Record<string,string>={new:"Новая",confirmed:"Подтверждена",packing:"Собирается",shipped:"Отправлена",completed:"Завершена",cancelled:"Отменена"};
 const money=(v:string)=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB"}).format(Number(v)/100);
 async function api<T>(path:string,options?:RequestInit):Promise<T>{
@@ -29,7 +31,9 @@ export default function AccountPortal(){
  const [confirmPassword,setConfirmPassword]=useState("");
  const [verificationOn,setVerificationOn]=useState(false);
  const [verificationEmail,setVerificationEmail]=useState(""),[verificationCode,setVerificationCode]=useState("");
- const [signupCancelToken,setSignupCancelToken]=useState("");
+ const [signupResumeToken,setSignupResumeToken]=useState("");
+ const [signupExpiresAt,setSignupExpiresAt]=useState(0),[codeExpiresAt,setCodeExpiresAt]=useState(0);
+ const [clock,setClock]=useState(0);
  const [addresses,setAddresses]=useState<Address[]>([]),[orders,setOrders]=useState<Order[]>([]);
  const [section,setSection]=useState<"orders"|"addresses"|"profile"|"security">("orders");
  const [addressOpen,setAddressOpen]=useState(false),[editAddressId,setEditAddressId]=useState<string|null>(null);
@@ -51,21 +55,62 @@ export default function AccountPortal(){
   api<{customer:Customer|null;verificationEnabled?:boolean}>("/api/account/session").then(async x=>{
    if(!active)return;
    setCustomer(x.customer);setVerificationOn(Boolean(x.verificationEnabled));
-   if(x.customer)await refresh();
+   if(x.customer){localStorage.removeItem(PENDING_KEY);await refresh();}
+   else if(x.verificationEnabled){
+    try{
+     const pending=JSON.parse(localStorage.getItem(PENDING_KEY)||"null") as PendingSignup|null;
+     if(pending && typeof pending.email==="string" && /^[a-f0-9]{64}$/.test(pending.resumeToken)){
+      const result=await api<{pending:boolean;email?:string;registrationExpiresInSeconds?:number;codeExpiresInSeconds?:number}>(
+       "/api/account/pending",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(pending)});
+      if(!active)return;
+      if(result.pending&&result.registrationExpiresInSeconds){
+       setVerificationEmail(result.email||pending.email);
+       setEmail(result.email||pending.email);
+       setSignupResumeToken(pending.resumeToken);
+       setVerificationCode("");
+       setSignupExpiresAt(Date.now()+result.registrationExpiresInSeconds*1000);
+       setCodeExpiresAt(Date.now()+(result.codeExpiresInSeconds||0)*1000);
+      }else localStorage.removeItem(PENDING_KEY);
+     }
+    }catch{localStorage.removeItem(PENDING_KEY);}
+   }
   }).catch(e=>{if(active)setError(String(e.message))}).finally(()=>{if(active)setLoading(false)});
   return()=>{active=false};
  },[]);
+ useEffect(()=>{
+  if(!verificationEmail)return;
+  const timer=setInterval(()=>{
+   const now=Date.now();
+   setClock(now);
+   if(signupExpiresAt&&now>=signupExpiresAt){
+    localStorage.removeItem(PENDING_KEY);
+    setVerificationEmail("");setVerificationCode("");setSignupResumeToken("");
+    setSignupExpiresAt(0);setCodeExpiresAt(0);
+    setTab("register");
+    setNotice("30 минут истекли. Заполните форму регистрации заново.");
+   }
+  },1000);
+  return()=>clearInterval(timer);
+ },[verificationEmail,signupExpiresAt]);
  async function submit(event:FormEvent<HTMLFormElement>){
   event.preventDefault();setBusy(true);setError("");setNotice("");
   try{
    if(tab==="register"){
     if(password!==confirmPassword)throw Error("Пароли не совпадают.");
-    const result=await api<{verificationRequired?:boolean;email?:string;cancelToken?:string}>("/api/account/register",{
+    const result=await api<{verificationRequired?:boolean;email?:string;resumeToken?:string;
+      registrationExpiresInSeconds?:number;expiresInSeconds?:number}>("/api/account/register",{
      method:"POST",headers:{"Content-Type":"application/json"},
      body:JSON.stringify({name,email,password})});
     if(result.verificationRequired){
-     setVerificationEmail(result.email||email.trim().toLowerCase());
-     setSignupCancelToken(result.cancelToken||"");
+     const pendingEmail=result.email||email.trim().toLowerCase();
+     setVerificationEmail(pendingEmail);
+     setSignupResumeToken(result.resumeToken||"");
+     setSignupExpiresAt(Date.now()+(result.registrationExpiresInSeconds||1800)*1000);
+     setCodeExpiresAt(Date.now()+(result.expiresInSeconds||600)*1000);
+     if(result.resumeToken)localStorage.setItem(PENDING_KEY,JSON.stringify({
+      email:pendingEmail,resumeToken:result.resumeToken
+     } satisfies PendingSignup));
      setVerificationCode("");
      setPassword("");setConfirmPassword("");
      setNotice("Код отправлен на электронную почту и действует 10 минут.");
@@ -83,7 +128,9 @@ export default function AccountPortal(){
   try{
    await api("/api/account/verify",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({email:verificationEmail,code:verificationCode})});
-   setVerificationEmail("");setVerificationCode("");setSignupCancelToken("");await refresh();
+   localStorage.removeItem(PENDING_KEY);
+   setVerificationEmail("");setVerificationCode("");setSignupResumeToken("");
+   setSignupExpiresAt(0);setCodeExpiresAt(0);await refresh();
    setNotice("Почта подтверждена, аккаунт создан.");
   }catch(e){setError(e instanceof Error?e.message:"Ошибка подтверждения.");}
   finally{setBusy(false);}
@@ -91,29 +138,23 @@ export default function AccountPortal(){
  async function resendCode(){
   setBusy(true);setError("");setNotice("");
   try{
-   await api("/api/account/resend",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({email:verificationEmail})});
-   setNotice("Новое письмо отправлено. Код действует 10 минут.");
+   const result=await api<{expiresInSeconds:number;registrationExpiresInSeconds:number}>(
+    "/api/account/resend",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({email:verificationEmail,resumeToken:signupResumeToken})});
+   setVerificationCode("");
+   setCodeExpiresAt(Date.now()+result.expiresInSeconds*1000);
+   setSignupExpiresAt(Date.now()+result.registrationExpiresInSeconds*1000);
+   setNotice("Новый код отправлен. Проверьте почту и папку «Спам».");
   }catch(e){setError(e instanceof Error?e.message:"Не удалось отправить письмо.");}
   finally{setBusy(false);}
  }
- async function cancelSignup(changeEmail:boolean){
-  setBusy(true);setError("");setNotice("");
-  try{
-   if(signupCancelToken){
-    await api("/api/account/cancel-signup",{method:"POST",headers:{"Content-Type":"application/json"},
-     body:JSON.stringify({email:verificationEmail,cancelToken:signupCancelToken})});
-   }
-   setVerificationEmail("");setVerificationCode("");setSignupCancelToken("");
-   setTab(changeEmail?"register":"login");
-   if(changeEmail){
-    setNotice("Введите другой email. Предыдущий код аннулирован.");
-   }else{
-    setEmail("");setName("");setPassword("");setConfirmPassword("");
-    setNotice("Регистрация отменена. Аккаунт не создан.");
-   }
-  }catch(e){setError(e instanceof Error?e.message:"Не удалось отменить регистрацию.");}
-  finally{setBusy(false);}
+ function changeSignupEmail(){
+  // Leave the temporary signup to expire server-side. It can no longer be
+  // resumed in this browser once a new email is selected.
+  localStorage.removeItem(PENDING_KEY);
+  setVerificationEmail("");setVerificationCode("");setSignupResumeToken("");
+  setSignupExpiresAt(0);setCodeExpiresAt(0);
+  setTab("register");setNotice("Укажите другой email для регистрации.");setError("");
  }
  async function saveAddress(event:FormEvent<HTMLFormElement>){
   event.preventDefault();setBusy(true);setError("");setNotice("");
@@ -194,7 +235,11 @@ export default function AccountPortal(){
    verificationEmail?
    <section className="buyer-auth buyer-panel">
     <h2>Подтвердите почту</h2>
-    <p className="buyer-muted">Введите код из письма на <strong>{verificationEmail}</strong>. Он действителен 10 минут.</p>
+    <p className="buyer-muted">Мы отправили код на <strong>{verificationEmail}</strong>.
+     Время на завершение регистрации — 30 минут.</p>
+    <p className="buyer-otp-timer">{codeExpiresAt>clock
+     ?"Код действует ещё "+Math.max(0,Math.ceil((codeExpiresAt-Date.now())/60000))+" мин."
+     :"Код истёк. Запросите новый."}</p>
     <form className="buyer-form" onSubmit={e=>void verifyEmail(e)}>
      <label htmlFor="account-signup-code">Шестизначный код</label>
      <OtpCodeInput id="account-signup-code" value={verificationCode} onChange={setVerificationCode}
@@ -206,8 +251,7 @@ export default function AccountPortal(){
     <p className="buyer-spam-hint"><span aria-hidden="true">✉️</span> Не нашли письмо? Проверьте папки <strong>«Спам»</strong> и <strong>«Рассылки»</strong>. Доставка может занять несколько минут.</p>
     <div className="buyer-auth-actions">
      <button type="button" disabled={busy} onClick={()=>void resendCode()}>Отправить код повторно</button>
-     <button type="button" disabled={busy} onClick={()=>void cancelSignup(true)}>Изменить email</button>
-     <button type="button" disabled={busy} className="buyer-otp-cancel" onClick={()=>void cancelSignup(false)}>Отменить регистрацию</button>
+     <button type="button" disabled={busy} onClick={changeSignupEmail}>Изменить email</button>
     </div>
    </section>:
    <section className="buyer-auth buyer-panel">
