@@ -41,3 +41,7 @@ public/uploads/
 .vira-running.lock
 /backups/
 .vira-transfer-*/
+
+# Windows updater: local installation receipt / managed file list
+.vira-updater-files.txt
+.vira-updater-version.txt
