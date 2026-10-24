@@ -38,6 +38,24 @@ export async function POST(req:NextRequest){
   return NextResponse.json({id:row.rows[0].id},{status:201,headers:noStore});
  }catch(err){return publicError(err);}
 }
+export async function PUT(req:NextRequest){
+ try{
+  const a=await customerGuard(req,true);if(a.response)return a.response;
+  let b:Record<string,unknown>|null;
+  try{b=object(await jsonBody(req));}catch{return bad("Некорректный запрос.");}
+  if(typeof b?.id!=="string"||!/^[0-9]{1,19}$/.test(b.id))return bad("Некорректный адрес.");
+  const address=validateAddress(b);
+  if(!address)return bad("Заполните ФИО, телефон, город, улицу и дом.");
+  const changed=await getPool().query(
+   `UPDATE shop_customer_addresses SET recipient=$3,phone=$4,city=$5,street=$6,
+       building=$7,apartment=$8,comment=$9 WHERE id=$1 AND customer_id=$2 RETURNING id`,
+   [b.id,a.customer!.id,address.recipient,address.phone,address.city,address.street,
+    address.building,address.apartment,address.comment]);
+  if(!changed.rowCount)return bad("Адрес не найден.",404);
+  return NextResponse.json({ok:true},{headers:noStore});
+ }catch(err){return publicError(err);}
+}
+
 export async function DELETE(req:NextRequest){
  try{
   const a=await customerGuard(req,true);if(a.response)return a.response;
