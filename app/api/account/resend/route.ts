@@ -23,7 +23,7 @@ export async function POST(req:NextRequest){
  const client=await getPool().connect();
  try{
   await client.query("BEGIN");
-  const row=await client.query<{cooldown:boolean;hourly:number;elapsed:boolean;remaining:number}>('
+  const row=await client.query<{cooldown:boolean;hourly:number;elapsed:boolean;remaining:number}>(
     `SELECT resend_after>NOW() AS cooldown,sent_in_window AS hourly,
        window_started_at<NOW()-INTERVAL '1 hour' AS elapsed,
        GREATEST(0,CEIL(EXTRACT(EPOCH FROM (registration_expires_at-NOW()))))::int AS remaining
