@@ -69,7 +69,7 @@ export default function AccountPortal(){
        setEmail(result.email||pending.email);
        setSignupResumeToken(pending.resumeToken);
        setVerificationCode("");
-       setSignupExpiresAt(Date.now()+result.registrationExpiresInSeconds*1000);
+       setSignupExpiresAt(Date.now()+(result.registrationExpiresInSeconds||0)*1000);
        setCodeExpiresAt(Date.now()+(result.codeExpiresInSeconds||0)*1000);
       }else localStorage.removeItem(PENDING_KEY);
      }
