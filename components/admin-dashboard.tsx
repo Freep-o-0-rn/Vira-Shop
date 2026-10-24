@@ -47,6 +47,8 @@ export default function AdminDashboard({login}:{login:string}) {
   const [existingProduct,setExistingProduct]=useState(false);
   const [editingCategory,setEditingCategory]=useState<FormCategory|null>(null);
   const [existingCategory,setExistingCategory]=useState(false);
+  const [deletingCategory,setDeletingCategory]=useState<Category|null>(null);
+  const [moveToCategory,setMoveToCategory]=useState("");
   const [emojiAuto,setEmojiAuto]=useState(true);
   const [emojiPickerOpen,setEmojiPickerOpen]=useState(false);
   const [filter,setFilter]=useState("");
@@ -162,10 +164,16 @@ export default function AdminDashboard({login}:{login:string}) {
     }catch(e){setError(e instanceof Error?e.message:"Ошибка.");}finally{setPending(false);}
   }
   async function deleteCategory(c:Category){
-    if(!confirm("Удалить категорию «"+c.title+"»? Если в ней есть товары, удаление будет запрещено."))return;
+    if(c.productCount>0&&!moveToCategory){setError("Выберите категорию, в которую перенести товары.");return;}
     setPending(true);setError("");setSuccess("");
-    try{await api("/api/admin/categories/"+encodeURIComponent(c.id),{method:"DELETE"});await refresh();notice("Категория удалена.");}
-    catch(e){setError(e instanceof Error?e.message:"Ошибка удаления.");}finally{setPending(false);}
+    try{
+      await api("/api/admin/categories/"+encodeURIComponent(c.id),{
+        method:"DELETE",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({targetCategoryId:c.productCount>0?moveToCategory:undefined})
+      });
+      setDeletingCategory(null);setMoveToCategory("");
+      await refresh();notice(c.productCount>0?"Категория удалена, все "+c.productCount+" товаров перенесены.":"Категория удалена.");
+    }catch(e){setError(e instanceof Error?e.message:"Ошибка удаления.");}finally{setPending(false);}
   }
   async function logout(){
     try{await api("/api/admin/session",{method:"DELETE"});window.location.assign("/admin/login");}
@@ -297,13 +305,33 @@ export default function AdminDashboard({login}:{login:string}) {
             {visible.length===0&&<p className="admin-help">Товары не найдены.</p>}
           </div>
         </>}
-        {tab==="categories"&&<div className="admin-panel"><h2>Категории</h2><div className="admin-category-list">{categories.map(c=><div className="admin-category-item" key={c.id}><div className="admin-category-icon">{c.emoji||"📦"}</div><div><strong>{c.title}</strong><small>{c.id} · товаров: {c.productCount} · {c.active?"активна":"скрыта"}</small></div><div className="admin-actions"><button disabled={pending} onClick={()=>editCategory(c)}>Изменить</button><button disabled={pending||c.productCount>0} title={c.productCount?"Сначала перенесите товары":""} onClick={()=>void deleteCategory(c)}>Удалить</button></div></div>)}</div></div>}
+        {tab==="categories"&&<div className="admin-panel"><h2>Категории</h2><div className="admin-category-list">{categories.map(c=><div className="admin-category-item" key={c.id}><div className="admin-category-icon">{c.emoji||"📦"}</div><div><strong>{c.title}</strong><small>{c.id} · товаров: {c.productCount} · {c.active?"активна":"скрыта"}</small></div><div className="admin-actions"><button disabled={pending} onClick={()=>editCategory(c)}>Изменить</button><button disabled={pending} title={c.productCount?"Удалить с переносом товаров":"Удалить категорию"} onClick={()=>{setDeletingCategory(c);setMoveToCategory(categories.find(x=>x.id!==c.id&&x.active)?.id??"");setError("");}}>Удалить</button></div></div>)}</div></div>}
         {tab==="orders"&&<AdminOrdersPanel onChanged={refresh}/>}
       </>}
     </section>
     {variantProduct&&<AdminVariantsEditor key={variantProduct.id}
       productId={variantProduct.id} price={variantProduct.price} stock={variantProduct.stock}
       onClose={()=>setVariantProduct(null)} onSaved={()=>void refresh()}/>}
+    {deletingCategory&&<div className="admin-modal-overlay" onClick={()=>{if(!pending)setDeletingCategory(null)}}>
+      <div className="admin-modal admin-modal-small" role="dialog" aria-modal="true" aria-label="Удаление категории" onClick={e=>e.stopPropagation()}>
+        <div className="admin-modal-heading"><div><span className="admin-eyebrow">КАТЕГОРИИ</span><h2>Удалить «{deletingCategory.title}»?</h2></div>
+          <button disabled={pending} aria-label="Закрыть" onClick={()=>setDeletingCategory(null)}>×</button></div>
+        {deletingCategory.productCount>0?<div className="admin-form-grid">
+          <p className="admin-help full">В категории {deletingCategory.productCount} товаров. Перед удалением все они будут перенесены в другую категорию. Товары и заказы не удаляются.</p>
+          <label className="full">Перенести товары в категорию
+            <select value={moveToCategory} disabled={pending} onChange={e=>setMoveToCategory(e.target.value)}>
+              <option value="">Выберите категорию</option>
+              {categories.filter(c=>c.id!==deletingCategory.id&&c.active).map(c=><option key={c.id} value={c.id}>{c.title}</option>)}
+            </select>
+          </label>
+          {!categories.some(c=>c.id!==deletingCategory.id&&c.active)&&<p className="admin-help full">Создайте или включите другую категорию, чтобы перенести товары.</p>}
+        </div>:<p className="admin-help">Категория пуста и будет удалена.</p>}
+        <div className="admin-form-bottom">
+          <button disabled={pending} onClick={()=>setDeletingCategory(null)}>Отмена</button>
+          <button className="admin-primary" disabled={pending||(deletingCategory.productCount>0&&!moveToCategory)} onClick={()=>void deleteCategory(deletingCategory)}>{pending?"Удаляем…":"Подтвердить удаление"}</button>
+        </div>
+      </div>
+    </div>}
     {editingProduct&&<div className="admin-modal-overlay" onClick={()=>{if(!pending&&!imageUploading)setEditingProduct(null)}}><div className="admin-modal" role="dialog" aria-modal="true" aria-label="Редактор товара" onClick={e=>e.stopPropagation()}>
       <div className="admin-modal-heading"><div><span className="admin-eyebrow">КАТАЛОГ</span><h2>{existingProduct?"Редактировать товар":"Новый товар"}</h2></div><button disabled={pending||imageUploading} aria-label="Закрыть" onClick={()=>setEditingProduct(null)}>×</button></div>
       <form onSubmit={e=>void saveProduct(e)}>
