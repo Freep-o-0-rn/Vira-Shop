@@ -95,7 +95,7 @@ assert.deepEqual(recovery.data,unknownReset.data);
 const resetMail=JSON.parse(readFileSync(outbox,"utf8"));
 assert.equal(resetMail.to,email);
 assert.equal(resetMail.kind,"reset");
-assert.match(resetMail.code,/^\\d{6}$/);
+assert.match(resetMail.code,/^\d{6}$/);
 const repeated=await call("/api/account/password-reset/request",{method:"POST",body:{email}});
 assert.deepEqual(repeated.data,recovery.data);
 assert.deepEqual(JSON.parse(readFileSync(outbox,"utf8")),resetMail);
