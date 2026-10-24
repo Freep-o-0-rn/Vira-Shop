@@ -131,6 +131,21 @@ const reordered=(await check("/api/products/"+galleryProduct.data.id)).data.item
 assert.equal(reordered.image,"/api/demo-image/photo-1505740420928-5e560c06d30e");
 assert.deepEqual(reordered.images,["/api/demo-image/photo-1505740420928-5e560c06d30e",uploaded.json.url]);
 
+// Category deletion must preserve products and transfer them atomically.
+const transferCategory={id:"test_transfer",title:"Temporary group",emoji:"📦",tone:"blue",active:true};
+await check("/api/admin/categories",{method:"POST",status:201,body:transferCategory,...auth});
+const movedItem=await check("/api/admin/products",{method:"POST",status:201,
+  body:{...generated,id:"",category:"test_transfer",title:"Transfer fixture"},...auth});
+await check("/api/admin/categories/test_transfer",{method:"DELETE",status:409,...auth});
+await check("/api/admin/categories/test_transfer",{method:"DELETE",status:400,body:{targetCategoryId:"missing"},...auth});
+await check("/api/admin/categories/test_transfer",{method:"DELETE",status:400,body:{targetCategoryId:"test_transfer"},...auth});
+const move=await check("/api/admin/categories/test_transfer",{method:"DELETE",body:{targetCategoryId:"electronics"},...auth});
+assert.equal(move.data.movedProducts,1);
+const moved=(await check("/api/products/"+movedItem.data.id)).data.item;
+assert.equal(moved.category,"electronics");
+await check("/api/admin/products/"+movedItem.data.id,{method:"DELETE",...auth});
+assert.ok(!(await check("/api/admin/categories",{...auth})).data.items.some(c=>c.id==="test_transfer"));
+
 await check("/api/admin/session",{method:"DELETE",...auth});
 await check("/api/admin/products",{status:401,cookie});
 console.log("Admin + PostgreSQL integration tests passed.");
