@@ -1,4 +1,5 @@
 "use client";
+import { publicImageUrl } from "@/lib/public-image-url";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { catalogHref, defaultCatalogRoute, parseCatalogRoute, pathToView, specFilterKey, type CatalogOrder, type CatalogRoute, type StorefrontView } from "@/lib/catalog-route";
 import { categories as demoCategories, products as demoProducts, rub, type Category, type Product, type ProductSpec, type StoreCategory } from "@/lib/catalog";
@@ -62,7 +63,7 @@ function ProductCard({ p, liked, quantity, onLike, onAdd }: { p: Product; liked:
   return <article className="product-card">
     <div className="product-visual">
       <a className="product-image-link" href={"/product/"+encodeURIComponent(p.id)} aria-label={"Открыть товар: "+p.title}>
-        {p.image?<img src={p.image} alt={p.title} loading="lazy"/>:<span className="product-image-placeholder">📦</span>}
+        {p.image?<img src={publicImageUrl(p.image)} alt={p.title} loading="lazy"/>:<span className="product-image-placeholder">📦</span>}
         {p.badge && <span className="product-badge">{p.badge}</span>}
       </a>
       <button type="button" className={"like-button " + (liked ? "liked" : "")} aria-label={liked ? "Удалить из избранного" : "В избранное"} aria-pressed={liked} onClick={onLike}><Icon name="heart"/></button>
@@ -433,9 +434,9 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
         {favoritesItems.length ? renderProducts(favoritesItems) : <div className="empty-panel"><span>♡</span><h2>Пока ничего нет</h2><p>Нажимайте сердечко на карточках товаров.</p><button onClick={() => openCategory("all")}>Перейти в каталог</button><p><a href="/checkout" className="buyer-link">Открыть серверную корзину →</a></p></div>}
       </section>}
       {view === "cart" && <section className="inner-page"><div className="page-heading"><div><span className="kicker">ВАШИ ПОКУПКИ</span><h1>Корзина</h1><p>Соберите товары в одном месте</p></div><span className="count-label">{cartCount} шт.</span></div>
-        {cartItems.length||variantItems.length ? <div className="cart-layout"><div className="cart-list">{cartItems.map((p) => <div className="cart-row" key={p.id}><img src={p.image} alt={p.title}/><div className="cart-description"><strong>{p.title}</strong><small>{p.subtitle}</small><button type="button" className="remove-link" onClick={() => setCart((old) => { const next = { ...old }; delete next[p.id]; return next; })}>Удалить</button></div><div className="cart-controls"><div><button onClick={() => subtract(p.id)} aria-label={"Уменьшить количество " + p.title}>−</button><span>{cart[p.id]}</span><button onClick={() => add(p.id)} aria-label={"Увеличить количество " + p.title}>+</button></div><strong>{rub(p.price * cart[p.id])}</strong></div></div>)}
+        {cartItems.length||variantItems.length ? <div className="cart-layout"><div className="cart-list">{cartItems.map((p) => <div className="cart-row" key={p.id}><img src={publicImageUrl(p.image)} alt={p.title}/><div className="cart-description"><strong>{p.title}</strong><small>{p.subtitle}</small><button type="button" className="remove-link" onClick={() => setCart((old) => { const next = { ...old }; delete next[p.id]; return next; })}>Удалить</button></div><div className="cart-controls"><div><button onClick={() => subtract(p.id)} aria-label={"Уменьшить количество " + p.title}>−</button><span>{cart[p.id]}</span><button onClick={() => add(p.id)} aria-label={"Увеличить количество " + p.title}>+</button></div><strong>{rub(p.price * cart[p.id])}</strong></div></div>)}
           {variantItems.map(({article,product,variant,quantity})=><div className="cart-row" key={"v:"+article}>
-            {variant?.images?.[0]||product.image?<img src={variant?.images?.[0]||product.image} alt={product.title}/>:<span>📦</span>}
+            {variant?.images?.[0]||product.image?<img src={publicImageUrl(variant?.images?.[0]||product.image)} alt={product.title}/>:<span>📦</span>}
             <div className="cart-description">
               <a href={"/product/"+encodeURIComponent(product.id)}><strong>{product.title}</strong></a>
               <small>{variant?.selection?.map(s=>s.name+": "+s.value).join(" · ")??"Артикул "+article}</small>
