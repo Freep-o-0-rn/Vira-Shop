@@ -20,13 +20,13 @@ const server=tls.createServer({key,cert},socket=>{
      const message=bodyLines.join("\n");
      const payload=/Content-Type: text\/plain; charset=UTF-8\nContent-Transfer-Encoding: base64\n\n([\s\S]*?)\n--vira_/i.exec(message)?.[1]?.replace(/\s/g,"")??"";
      const decoded=Buffer.from(payload,"base64").toString("utf8");
-     const code=/(?:регистрации в|удаления аккаунта) Vira Shop:\s*(\d{6})/.exec(decoded)?.[1];
+     const code=/(?:регистрации в|удаления аккаунта|восстановления пароля) Vira Shop:\s*(\d{6})/.exec(decoded)?.[1];
      if(!code){reply("554","Missing verification code");continue;}
      const htmlPayload=/Content-Type: text\/html; charset=UTF-8\nContent-Transfer-Encoding: base64\n\n([\s\S]*?)\n--vira_/i.exec(message)?.[1]?.replace(/\s/g,"")??"";
      const html=Buffer.from(htmlPayload,"base64").toString("utf8");
      const htmlVisibleCode=/<p[^>]*font-size:36px[^>]*>([^<]+)<\/p>/i.exec(html)?.[1]??"";
      if(htmlVisibleCode!==code){reply("554","Visible HTML OTP must contain six adjacent digits");continue;}
-     writeFileSync(output,JSON.stringify({to:recipient,code,htmlVisibleCode,kind:decoded.includes("удаления аккаунта")?"delete":"signup"}),"utf8");
+     writeFileSync(output,JSON.stringify({to:recipient,code,htmlVisibleCode,kind:decoded.includes("удаления аккаунта")?"delete":decoded.includes("восстановления пароля")?"reset":"signup"}),"utf8");
      bodyLines=[];inData=false;
      reply("250","Saved");
     }else bodyLines.push(line);
