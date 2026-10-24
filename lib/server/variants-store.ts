@@ -1,3 +1,4 @@
+import { localDemoPhoto } from "@/lib/demo-image-url";
 import {getPool} from "@/lib/server/db";
 import {combinations,signature,type VariantGroup,type StoreVariant,type VariantSelection} from "@/lib/variants";
 
@@ -74,9 +75,16 @@ export async function loadVariants(productId:string,publicOnly=false):Promise<{g
  `SELECT article,selection,price_minor::text,old_price_minor::text,stock_count,images,is_active
   FROM shop_product_variants WHERE product_id=$1 ${publicOnly?"AND is_active=TRUE":""} ORDER BY article`,[productId]);
  const groups=product.rows[0].variant_groups??[];
- return {groups,variants:rows.rows.map(v=>({article:v.article,selection:v.selection,
+ // Public UI must not send direct Unsplash URLs to mobile devices.
+ // Keep original values in admin API, so editing does not rewrite stored data.
+ const publicGroups = publicOnly ? groups.map(group=>({
+  ...group,values:group.values.map(value=>({
+   ...value,...(value.image?{image:localDemoPhoto(value.image)}:{})
+  }))
+ })) : groups;
+ return {groups:publicGroups,variants:rows.rows.map(v=>({article:v.article,selection:v.selection,
   priceMinor:v.price_minor,oldPriceMinor:v.old_price_minor,stock:v.stock_count,
-  images:v.images,active:v.is_active}))};
+  images:publicOnly?v.images.map(localDemoPhoto):v.images,active:v.is_active}))};
 }
 export async function saveVariants(productId:string,body:unknown):Promise<"missing"|"ok"|"conflict"|"invalid">{
  const cfg=validateVariantConfig(body);
