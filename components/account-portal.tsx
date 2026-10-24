@@ -32,6 +32,8 @@ export default function AccountPortal(){
  const [addressOpen,setAddressOpen]=useState(false),[editAddressId,setEditAddressId]=useState<string|null>(null);
  const [profileName,setProfileName]=useState("");
  const [oldPassword,setOldPassword]=useState(""),[nextPassword,setNextPassword]=useState(""),[repeatPassword,setRepeatPassword]=useState("");
+ const [deletionStarted,setDeletionStarted]=useState(false),[deletionCode,setDeletionCode]=useState("");
+ const [deletionAgreed,setDeletionAgreed]=useState(false);
  const [address,setAddress]=useState({...EMPTY}),[error,setError]=useState(""),[notice,setNotice]=useState("");
  async function refresh(){
   const [session,a,o]=await Promise.all([
@@ -128,6 +130,27 @@ export default function AccountPortal(){
   }catch(e){setError(e instanceof Error?e.message:"Не удалось изменить пароль.");}
   finally{setBusy(false);}
  }
+ async function requestAccountDeletion(){
+  setBusy(true);setError("");setNotice("");
+  try{
+   await api("/api/account/delete/request",{method:"POST"});
+   setDeletionCode("");setDeletionAgreed(false);setDeletionStarted(true);
+   setNotice("Письмо с кодом отправлено на "+customer?.email+". Проверьте также папку «Спам».");
+  }catch(e){setError(e instanceof Error?e.message:"Не удалось отправить письмо.");}
+  finally{setBusy(false);}
+ }
+ async function confirmAccountDeletion(event:FormEvent<HTMLFormElement>){
+  event.preventDefault();setBusy(true);setError("");setNotice("");
+  try{
+   await api("/api/account/delete/confirm",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({code:deletionCode,confirm:deletionAgreed})});
+   setDeletionStarted(false);setDeletionCode("");setDeletionAgreed(false);
+   setCustomer(null);setAddresses([]);setOrders([]);setTab("login");
+   setSection("orders");
+   setNotice("Ваш аккаунт удалён. История завершённых заказов остаётся в учётных записях магазина.");
+  }catch(e){setError(e instanceof Error?e.message:"Не удалось удалить аккаунт.");}
+  finally{setBusy(false);}
+ }
  async function logout(){
   setBusy(true);try{
    await api("/api/account/session",{method:"DELETE"});
@@ -153,6 +176,7 @@ export default function AccountPortal(){
      <button type="submit" className="buyer-primary" disabled={busy||verificationCode.length!==6}>
       {busy?"Проверяем…":"Подтвердить email"}</button>
     </form>
+    <p className="buyer-spam-hint"><span aria-hidden="true">✉️</span> Не нашли письмо? Проверьте папки <strong>«Спам»</strong> и <strong>«Рассылки»</strong>. Доставка может занять несколько минут.</p>
     <div className="buyer-auth-actions">
      <button type="button" disabled={busy} onClick={()=>void resendCode()}>Отправить код повторно</button>
      <button type="button" disabled={busy} onClick={()=>{setVerificationEmail("");setVerificationCode("");setError("");setNotice("");}}>Изменить email</button>
@@ -244,6 +268,32 @@ export default function AccountPortal(){
        <label>Повтор нового пароля<input type="password" required minLength={8} autoComplete="new-password" value={repeatPassword} onChange={e=>setRepeatPassword(e.target.value)}/></label>
        <button type="submit" className="buyer-primary" disabled={busy}>Сменить пароль</button>
       </form>
+      <div className="buyer-danger-zone">
+       <h3>Удаление аккаунта</h3>
+       <p className="buyer-muted">Аккаунт, сохранённые адреса, корзина и сеансы входа будут удалены.
+        Завершённые и отменённые заказы сохранятся в истории магазина, включая контактные данные из оформления.
+        При наличии незавершённых заказов удаление недоступно.</p>
+       {!deletionStarted?
+        <button type="button" className="buyer-danger-button" disabled={busy}
+         onClick={()=>void requestAccountDeletion()}>Удалить аккаунт</button>:
+        <form className="buyer-form" onSubmit={e=>void confirmAccountDeletion(e)}>
+         <p className="buyer-muted">Мы отправили код подтверждения на <strong>{customer.email}</strong>.
+          Он действителен 10 минут. Проверьте также папку «Спам».</p>
+         <label>Код из письма<input type="text" inputMode="numeric" autoComplete="one-time-code"
+          required maxLength={6} pattern="[0-9]{6}" placeholder="000000"
+          value={deletionCode} onChange={e=>setDeletionCode(e.target.value.replace(/\D/g,"").slice(0,6))}/></label>
+         <label className="buyer-delete-confirm">
+          <input type="checkbox" checked={deletionAgreed} onChange={e=>setDeletionAgreed(e.target.checked)}/>
+          Я понимаю, что восстановить аккаунт после удаления нельзя.
+         </label>
+         <button type="submit" className="buyer-danger-button" disabled={busy||!deletionAgreed||deletionCode.length!==6}>
+          {busy?"Удаление…":"Подтвердить удаление аккаунта"}</button>
+         <div className="buyer-auth-actions">
+          <button type="button" disabled={busy} onClick={()=>void requestAccountDeletion()}>Отправить код повторно</button>
+          <button type="button" disabled={busy} onClick={()=>{setDeletionStarted(false);setDeletionCode("");setDeletionAgreed(false);}}>Отмена</button>
+         </div>
+        </form>}
+      </div>
      </section>}
     </div>
    </>}
