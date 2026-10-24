@@ -35,7 +35,7 @@ export default function AccountPortal(){
  const [resetEmail,setResetEmail]=useState("");
  const [resetCode,setResetCode]=useState("");
  const [resetPassword,setResetPassword]=useState(""),[resetPasswordAgain,setResetPasswordAgain]=useState("");
- const [resetExpiresAt,setResetExpiresAt]=useState(0);
+
  const [verificationOn,setVerificationOn]=useState(false);
  const [verificationEmail,setVerificationEmail]=useState(""),[verificationCode,setVerificationCode]=useState("");
  const [signupResumeToken,setSignupResumeToken]=useState("");
@@ -106,11 +106,7 @@ export default function AccountPortal(){
   },1000);
   return()=>clearInterval(timer);
  },[verificationEmail,signupExpiresAt,codeExpiresAt]);
- useEffect(()=>{
-  if(resetStep!=="code")return;
-  const timer=setInterval(()=>setClock(Date.now()),1000);
-  return()=>clearInterval(timer);
- },[resetStep]);
+
  async function requestPasswordReset(event?:FormEvent<HTMLFormElement>){
   event?.preventDefault();
   if(busy)return;
@@ -120,7 +116,7 @@ export default function AccountPortal(){
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({email:resetEmail})});
    setResetStep("code");setResetCode("");
-   setClock(Date.now());setResetExpiresAt(Date.now()+600000);
+
    setNotice("Если аккаунт существует, на его email отправлено письмо. Проверьте также папку «Спам».");
   }catch(e){setError(e instanceof Error?e.message:"Не удалось отправить запрос на восстановление.");}
   finally{setBusy(false);}
