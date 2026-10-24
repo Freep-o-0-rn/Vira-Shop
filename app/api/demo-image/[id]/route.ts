@@ -12,6 +12,30 @@ const PHOTO_ID = /^photo-\d{10,13}-[0-9a-f]{12}$/;
 const MAX_BYTES = 5 * 1024 * 1024;
 const execFileAsync = promisify(execFile);
 const inFlight = new Map<string, Promise<Buffer>>();
+const cooldown = new Map<string, number>();
+let activeDownloads = 0;
+const downloadWaiters: Array<() => void> = [];
+
+// Cap photo downloads so they do not compete with the storefront's JS/API.
+async function withDownloadSlot<T>(work: () => Promise<T>): Promise<T> {
+  if (activeDownloads >= 3) {
+    await new Promise<void>((resolve) => downloadWaiters.push(resolve));
+  }
+  activeDownloads++;
+  try { return await work(); }
+  finally {
+    activeDownloads--;
+    downloadWaiters.shift()?.();
+  }
+}
+
+function externalFallback(id: string): Response {
+  // Keep desktop images working even when this Windows server cannot reach Unsplash.
+  // Phones still need the local cache if they cannot reach the original host.
+  const response = Response.redirect("https://images.unsplash.com/" + id + "?auto=format&fit=crop&w=650&q=80", 307);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
 
 function validJpeg(bytes: Uint8Array): boolean {
   return bytes.byteLength >= 32 && bytes.byteLength <= MAX_BYTES &&
@@ -20,7 +44,7 @@ function validJpeg(bytes: Uint8Array): boolean {
 }
 
 async function downloadWithNode(url: string): Promise<Buffer> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(12000), cache: "no-store" });
+  const response = await fetch(url, { signal: AbortSignal.timeout(5000), cache: "no-store" });
   if (!response.ok) throw new Error(`Image source HTTP ${response.status}`);
   const mime = response.headers.get("content-type")?.split(";")[0].trim();
   if (mime !== "image/jpeg") throw new Error(`Unexpected image format: ${mime}`);
@@ -35,9 +59,9 @@ async function downloadWithCurl(url: string): Promise<Buffer> {
   // Windows curl.exe can use different proxy / system certificate settings
   // than Node.js fetch. No shell is involved and URLs are server-generated.
   const { stdout } = await execFileAsync("curl.exe", [
-    "--fail", "--location", "--silent", "--show-error", "--max-time", "18",
+    "--fail", "--location", "--silent", "--show-error", "--max-time", "6",
     "--proto", "=https", "--proto-redir", "=https", url,
-  ], { encoding: "buffer", timeout: 20000, maxBuffer: MAX_BYTES + 1024, windowsHide: true });
+  ], { encoding: "buffer", timeout: 8000, maxBuffer: MAX_BYTES + 1024, windowsHide: true });
   const data = Buffer.from(stdout);
   if (!validJpeg(data)) throw new Error("Invalid JPEG from curl");
   return data;
@@ -69,7 +93,7 @@ async function loadPhoto(id: string): Promise<Buffer> {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT")
       console.warn("[Vira Shop] Demo photo cache read issue:", error);
   }
-  const image = await fetchPhoto(id);
+  const image = await withDownloadSlot(() => fetchPhoto(id));
   const tmp = path + "." + randomUUID() + ".tmp";
   try {
     await mkdir(dirname(path), { recursive: true });
@@ -85,13 +109,32 @@ async function loadPhoto(id: string): Promise<Buffer> {
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   if (!PHOTO_ID.test(id)) return new Response("Not found", { status: 404 });
+  if ((cooldown.get(id) ?? 0) > Date.now()) return externalFallback(id);
   let task = inFlight.get(id);
   if (!task) {
     task = loadPhoto(id);
     inFlight.set(id, task);
-    void task.then(() => inFlight.delete(id), () => inFlight.delete(id));
+    void task.then(() => {
+      inFlight.delete(id);
+      cooldown.delete(id);
+    }, (error) => {
+      inFlight.delete(id);
+      cooldown.set(id, Date.now() + 30000);
+      console.warn("[Vira Shop] Demo photo origin unavailable:", id, error);
+    });
   }
+
+  // Never make a phone wait a minute for a missing image. The download continues
+  // in the background and, once successful, subsequent requests use disk cache.
+  let waitTimer: ReturnType<typeof setTimeout> | undefined;
   try {
+    const outcome = await Promise.race([
+      task.then(() => "ready" as const, () => "failed" as const),
+      new Promise<"slow">((resolve) => {
+        waitTimer = setTimeout(() => resolve("slow"), 2500);
+      }),
+    ]);
+    if (outcome !== "ready") return externalFallback(id);
     const image = await task;
     // Copy to a plain ArrayBuffer for compatibility with TypeScript's BodyInit.
     const body = new ArrayBuffer(image.byteLength);
@@ -103,9 +146,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       "X-Content-Type-Options": "nosniff",
     }});
   } catch (error) {
-    console.error("[Vira Shop] Could not load demo photo", id, error);
-    return new Response("Photo provider unavailable", {
-      status: 502, headers: { "Cache-Control": "no-store" },
-    });
+    console.warn("[Vira Shop] Failed to read demo photo:", id, error);
+    return externalFallback(id);
+  } finally {
+    if (waitTimer !== undefined) clearTimeout(waitTimer);
   }
 }
