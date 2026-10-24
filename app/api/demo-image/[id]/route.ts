@@ -32,9 +32,10 @@ async function withDownloadSlot<T>(work: () => Promise<T>): Promise<T> {
 function externalFallback(id: string): Response {
   // Keep desktop images working even when this Windows server cannot reach Unsplash.
   // Phones still need the local cache if they cannot reach the original host.
-  const response = Response.redirect("https://images.unsplash.com/" + id + "?auto=format&fit=crop&w=650&q=80", 307);
-  response.headers.set("Cache-Control", "no-store");
-  return response;
+  return new Response(null, { status: 307, headers: {
+    Location: "https://images.unsplash.com/" + id + "?auto=format&fit=crop&w=650&q=80",
+    "Cache-Control": "no-store",
+  }});
 }
 
 function validJpeg(bytes: Uint8Array): boolean {
