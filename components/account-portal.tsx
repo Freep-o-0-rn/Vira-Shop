@@ -1,3 +1,4 @@
+import {normalizeVerificationCode} from "@/lib/verification-code";
 "use client";
 import {useEffect,useState,type FormEvent} from "react";
 import Link from "next/link";
@@ -174,8 +175,8 @@ export default function AccountPortal(){
     <p className="buyer-muted">Введите код из письма на <strong>{verificationEmail}</strong>. Он действителен 10 минут.</p>
     <form className="buyer-form" onSubmit={e=>void verifyEmail(e)}>
      <label>Шестизначный код<input required autoComplete="one-time-code" inputMode="numeric"
-      pattern="[0-9]{6}" maxLength={6} placeholder="000000"
-      value={verificationCode} onChange={e=>setVerificationCode(e.target.value.replace(/\D/g,"").slice(0,6))}/></label>
+      pattern="[0-9]{6}" placeholder="000000"
+      value={verificationCode} onChange={e=>setVerificationCode(normalizeVerificationCode(e.target.value))}/></label>
      <button type="submit" className="buyer-primary" disabled={busy||verificationCode.length!==6}>
       {busy?"Проверяем…":"Подтвердить email"}</button>
     </form>
@@ -283,8 +284,8 @@ export default function AccountPortal(){
          <p className="buyer-muted">Мы отправили код подтверждения на <strong>{customer.email}</strong>.
           Он действителен 10 минут. Проверьте также папку «Спам».</p>
          <label>Код из письма<input type="text" inputMode="numeric" autoComplete="one-time-code"
-          required maxLength={6} pattern="[0-9]{6}" placeholder="000000"
-          value={deletionCode} onChange={e=>setDeletionCode(e.target.value.replace(/\D/g,"").slice(0,6))}/></label>
+          required pattern="[0-9]{6}" placeholder="000000"
+          value={deletionCode} onChange={e=>setDeletionCode(normalizeVerificationCode(e.target.value))}/></label>
          <label className="buyer-delete-confirm">
           <input type="checkbox" checked={deletionAgreed} onChange={e=>setDeletionAgreed(e.target.checked)}/>
           Я понимаю, что восстановить аккаунт после удаления нельзя.
