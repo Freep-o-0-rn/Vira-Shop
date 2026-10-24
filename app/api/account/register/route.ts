@@ -34,10 +34,15 @@ export async function POST(req:NextRequest){
    if(registered.rowCount){
     await client.query("ROLLBACK");return bad("Этот email уже зарегистрирован.",409);
    }
-   const previous=await client.query<{cooldown:boolean;hourly:number;elapsed:boolean}>(
+   const previous=await client.query<{cooldown:boolean;hourly:number;elapsed:boolean;registration_open:boolean}>(
     `SELECT resend_after>NOW() AS cooldown,sent_in_window AS hourly,
-      window_started_at<NOW()-INTERVAL '1 hour' AS elapsed
+      window_started_at<NOW()-INTERVAL '1 hour' AS elapsed,
+      registration_expires_at>NOW() AS registration_open
       FROM shop_customer_signup_codes WHERE email=$1 FOR UPDATE`,[email]);
+   if(previous.rowCount && !previous.rows[0].registration_open){
+    await client.query("ROLLBACK");
+    return bad("30 минут на запрос кодов истекли. Если последний код ещё действует, введите его.",410);
+   }
    if(previous.rowCount && previous.rows[0].cooldown){
     await client.query("ROLLBACK");return bad("Повторный код можно запросить через 60 секунд.",429);
    }
@@ -51,7 +56,7 @@ export async function POST(req:NextRequest){
      name=EXCLUDED.name,password_hash=EXCLUDED.password_hash,code_hash=EXCLUDED.code_hash,
      resume_token_hash=EXCLUDED.resume_token_hash,
      registration_expires_at=shop_customer_signup_codes.registration_expires_at,
-     expires_at=LEAST(EXCLUDED.expires_at,shop_customer_signup_codes.registration_expires_at),
+     expires_at=EXCLUDED.expires_at,
      resend_after=EXCLUDED.resend_after,failed_attempts=0,
      sent_in_window=CASE WHEN shop_customer_signup_codes.window_started_at<NOW()-INTERVAL '1 hour'
       THEN 1 ELSE shop_customer_signup_codes.sent_in_window+1 END,
