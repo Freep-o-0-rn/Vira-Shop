@@ -1,10 +1,11 @@
+import {verificationEnabled} from "@/lib/server/customer-mail";
 import {NextRequest,NextResponse} from "next/server";
 import {getPool} from "@/lib/server/db";
 import {bad,clearCustomerCookie,createCustomerSession,currentCustomer,customerGuard,deleteCustomerSession,emailValid,fromRequest,jsonBody,noStore,object,passwordValid,publicError,setCustomerCookie,hashPassword,verifyPassword,denyCrossOrigin,CUSTOMER_COOKIE} from "@/lib/server/customer-auth";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export async function GET(){
- try {const customer=await currentCustomer();return NextResponse.json({customer},{headers:noStore});}
+ try {const customer=await currentCustomer();return NextResponse.json({customer,verificationEnabled:verificationEnabled()},{headers:noStore});}
  catch(err){return publicError(err);}
 }
 export async function POST(req:NextRequest){
