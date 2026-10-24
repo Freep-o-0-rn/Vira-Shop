@@ -1,0 +1,36 @@
+name: Restore exact package lock for stable snapshot
+on:
+  push:
+    branches: [stable-upload-2026-10-25]
+    paths:
+      - .github/workflows/import-user-lock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  restore-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct and verify uploaded lockfile
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, hashlib
+          from pathlib import Path
+          payload = ''.join(Path(f'scripts/.import-lock-{n}.txt').read_text().strip() for n in range(1,5))
+          raw = gzip.decompress(base64.b64decode(payload))
+          sha = hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+          expected = '4fee8457943bb0793bd97785e319cc8fbf1bf0a1'
+          if sha != expected:
+              raise SystemExit(f'LOCKFILE SHA MISMATCH: {sha}')
+          Path('package-lock.json').write_bytes(raw)
+          print(f'Verified original lockfile: {len(raw)} bytes, Git SHA {sha}')
+          PY
+      - name: Commit verified original lockfile
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m "snapshot: restore exact dependency lock from uploaded working version"
+          git push origin HEAD:stable-upload-2026-10-25
