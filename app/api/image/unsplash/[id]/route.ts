@@ -19,7 +19,11 @@ function isJpeg(data: Uint8Array): boolean {
 }
 
 function imageResponse(image: Uint8Array, source: "local" | "remote"): Response {
-  return new Response(image, {
+  // The Web Response API expects an ArrayBuffer; Buffer/Uint8Array can
+  // trigger a TypeScript BodyInit mismatch with Node.js 24 typings.
+  const body = new ArrayBuffer(image.byteLength);
+  new Uint8Array(body).set(image);
+  return new Response(body, {
     headers: {
       "Content-Type": "image/jpeg",
       "Content-Length": String(image.byteLength),
