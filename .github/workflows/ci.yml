@@ -37,11 +37,11 @@ jobs:
         run: npm run admin:create
       - run: npm run typecheck
       - run: npm run build
-      - name: New photos work without rebuilding
-        run: node scripts/smoke-image-serving.mjs
       - name: API integration tests (embedded local DB)
         run: |
           npm run start -- --port 3000 > /tmp/vira-server.log 2>&1 &
+          echo "Testing dynamic photo uploads"
+          node scripts/smoke-image-serving.mjs || (cat /tmp/vira-server.log && exit 1)
           echo "Testing admin API"
           timeout 110s node scripts/smoke-admin.mjs || (cat /tmp/vira-server.log && exit 1)
           echo "Testing catalog API"
