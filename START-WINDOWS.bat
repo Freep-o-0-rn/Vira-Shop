@@ -3,7 +3,7 @@ setlocal EnableExtensions
 chcp 65001 >nul
 cd /d "%~dp0"
 if errorlevel 1 goto :bad_folder
-title Vira Shop - Local Development Server
+title V54.shop - Next.js + Caddy
 echo.
 echo ====================================================
 echo           VIRA SHOP - LOCAL SERVER
@@ -18,6 +18,14 @@ if errorlevel 1 (
     echo Run: npm install ^&^& npm run dev
     goto :finished_error
 )
+echo Checking Caddy in C:\Caddy...
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\ensure-caddy-windows.ps1"
+if errorlevel 1 (
+    echo ERROR: Caddy startup failed. See C:\Caddy\v54-caddy-stderr.log
+    goto :finished_error
+)
+echo.
+echo Starting the existing Vira Shop server...
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\start-windows.ps1"
 if errorlevel 1 goto :finished_error
 echo.
