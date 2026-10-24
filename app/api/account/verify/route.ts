@@ -26,9 +26,9 @@ export async function POST(req:NextRequest){
   await client.query("BEGIN");
   const pending=await client.query<{name:string;password_hash:string;code_hash:string;expired:boolean;failed_attempts:number}>(
    `SELECT name,password_hash,code_hash,expires_at<NOW() AS expired,failed_attempts
-     FROM shop_customer_signup_codes WHERE email=$1 AND registration_expires_at>NOW() FOR UPDATE`,[email]);
+     FROM shop_customer_signup_codes WHERE email=$1 AND expires_at>NOW() FOR UPDATE`,[email]);
   const row=pending.rows[0];
-  if(!row){await client.query("ROLLBACK");return bad("Регистрация истекла или код не найден. Начните регистрацию заново.",410);}
+  if(!row){await client.query("ROLLBACK");return bad("Код подтверждения истёк или регистрация не найдена. Запросите новый код, если 30 минут ещё не прошли.",410);}
   if(row.expired){await client.query("ROLLBACK");return bad("Срок действия кода истёк. Запросите новый.",410);}
   if(row.failed_attempts>=5){await client.query("ROLLBACK");return bad("Слишком много попыток. Запросите новый код.",429);}
   if(!(await verifyPassword(code,row.code_hash))){
