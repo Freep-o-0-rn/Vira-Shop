@@ -85,3 +85,14 @@ jobs:
         run: npm run build
       - name: Verify Windows production homepage and catalog
         run: node scripts/test-production-routes.mjs
+
+  windows-node22:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: node scripts/test-production-routes.mjs
