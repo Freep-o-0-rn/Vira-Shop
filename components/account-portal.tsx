@@ -31,6 +31,11 @@ export default function AccountPortal(){
  const [tab,setTab]=useState<"login"|"register">("login");
  const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[name,setName]=useState("");
  const [confirmPassword,setConfirmPassword]=useState("");
+ const [resetStep,setResetStep]=useState<"email"|"code"|null>(null);
+ const [resetEmail,setResetEmail]=useState("");
+ const [resetCode,setResetCode]=useState("");
+ const [resetPassword,setResetPassword]=useState(""),[resetPasswordAgain,setResetPasswordAgain]=useState("");
+ const [resetExpiresAt,setResetExpiresAt]=useState(0);
  const [verificationOn,setVerificationOn]=useState(false);
  const [verificationEmail,setVerificationEmail]=useState(""),[verificationCode,setVerificationCode]=useState("");
  const [signupResumeToken,setSignupResumeToken]=useState("");
@@ -101,6 +106,54 @@ export default function AccountPortal(){
   },1000);
   return()=>clearInterval(timer);
  },[verificationEmail,signupExpiresAt,codeExpiresAt]);
+ useEffect(()=>{
+  if(resetStep!=="code")return;
+  const timer=setInterval(()=>setClock(Date.now()),1000);
+  return()=>clearInterval(timer);
+ },[resetStep]);
+ async function requestPasswordReset(event?:FormEvent<HTMLFormElement>){
+  event?.preventDefault();
+  if(busy)return;
+  setBusy(true);setError("");setNotice("");
+  try{
+   await api("/api/account/password-reset/request",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({email:resetEmail})});
+   setResetStep("code");setResetCode("");
+   setClock(Date.now());setResetExpiresAt(Date.now()+600000);
+   setNotice("Если аккаунт существует, на его email отправлено письмо. Проверьте также папку «Спам».");
+  }catch(e){setError(e instanceof Error?e.message:"Не удалось отправить запрос на восстановление.");}
+  finally{setBusy(false);}
+ }
+ async function finishPasswordReset(event:FormEvent<HTMLFormElement>){
+  event.preventDefault();
+  if(busy)return;
+  setError("");setNotice("");
+  if(resetPassword!==resetPasswordAgain){setError("Новые пароли не совпадают.");return;}
+  setBusy(true);
+  try{
+   await api("/api/account/password-reset/confirm",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({email:resetEmail,code:resetCode,newPassword:resetPassword})});
+   setTab("login");setEmail(resetEmail);
+   setResetStep(null);setResetCode("");setResetPassword("");setResetPasswordAgain("");
+   setPassword("");
+   setNotice("Пароль изменён. Войдите с новым паролем.");
+  }catch(e){
+   setResetCode("");
+   setError(e instanceof Error?e.message:"Не удалось изменить пароль.");
+  }finally{setBusy(false);}
+ }
+ function beginPasswordReset(){
+  setResetEmail(email);
+  setResetStep("email");
+  setResetCode("");setResetPassword("");setResetPasswordAgain("");
+  setError("");setNotice("");
+ }
+ function stopPasswordReset(){
+  setResetStep(null);setResetCode("");setResetPassword("");setResetPasswordAgain("");
+  setError("");setNotice("");setTab("login");
+ }
  async function submit(event:FormEvent<HTMLFormElement>){
   event.preventDefault();setBusy(true);setError("");setNotice("");
   try{
@@ -286,6 +339,37 @@ export default function AccountPortal(){
      <button type="button" disabled={busy} onClick={changeSignupEmail}>Изменить email</button>
     </div>
    </section>:
+   resetStep?
+   <section className="buyer-auth buyer-panel">
+    <button type="button" className="buyer-back-link" onClick={stopPasswordReset} disabled={busy}>← Вернуться ко входу</button>
+    <h2>{resetStep==="email"?"Восстановление пароля":"Проверьте электронную почту"}</h2>
+    {resetStep==="email"?<>
+     <p className="buyer-muted">Введите email аккаунта Vira Shop. Мы отправим код для смены пароля.</p>
+     <form className="buyer-form" onSubmit={e=>void requestPasswordReset(e)}>
+      <label>Email<input type="email" autoComplete="email" required placeholder="name@example.com"
+       value={resetEmail} onChange={e=>setResetEmail(e.target.value)}/></label>
+      <button type="submit" className="buyer-primary" disabled={busy}>Получить код</button>
+     </form>
+    </>:<>
+     <p className="buyer-muted">Если аккаунт существует, код отправлен на <strong>{resetEmail}</strong>.
+      Код действителен 10 минут.</p>
+     <form className="buyer-form" onSubmit={e=>void finishPasswordReset(e)}>
+      <label htmlFor="account-reset-code">Код из письма</label>
+      <OtpCodeInput id="account-reset-code" value={resetCode} onChange={setResetCode} disabled={busy}/>
+      <p className="buyer-otp-tip" id="account-reset-code-hint">Можно вставить все шесть цифр сразу.</p>
+      <label>Новый пароль<input type="password" autoComplete="new-password" required minLength={8} maxLength={256}
+       value={resetPassword} onChange={e=>setResetPassword(e.target.value)}/></label>
+      <label>Повторите пароль<input type="password" autoComplete="new-password" required minLength={8} maxLength={256}
+       value={resetPasswordAgain} onChange={e=>setResetPasswordAgain(e.target.value)}/></label>
+      <button type="submit" className="buyer-primary" disabled={busy||resetCode.length!==6}>Сохранить новый пароль</button>
+     </form>
+     <p className="buyer-spam-hint">✉️ Не пришло письмо? Проверьте «Спам» и «Рассылки».</p>
+     <div className="buyer-auth-actions">
+      <button type="button" disabled={busy} onClick={()=>void requestPasswordReset()}>Запросить код повторно</button>
+      <button type="button" disabled={busy} onClick={()=>{setResetCode("");setResetStep("email");setError("");}}>Другой email</button>
+     </div>
+    </>}
+   </section>:
    <section className="buyer-auth buyer-panel">
     <div className="buyer-tabs"><button type="button" className={tab==="login"?"selected":""} onClick={()=>{setTab("login");setError("");}}>Войти</button>
      <button type="button" className={tab==="register"?"selected":""} onClick={()=>{setTab("register");setError("");}}>Регистрация</button></div>
@@ -298,6 +382,8 @@ export default function AccountPortal(){
      <label>Пароль<input required type="password" minLength={tab==="register"&&verificationOn?8:6} maxLength={256}
       autoComplete={tab==="register"?"new-password":"current-password"}
       placeholder={tab==="register"?(verificationOn?"Минимум 8 символов":"Минимум 6 символов"):"Ваш пароль"} value={password} onChange={e=>setPassword(e.target.value)}/></label>
+     {tab==="login"&&<button type="button" className="buyer-forgot-link"
+      onClick={beginPasswordReset}>Забыли пароль?</button>}
      {tab==="register"&&<label>Повторите пароль<input required type="password" minLength={verificationOn?8:6} maxLength={256}
       autoComplete="new-password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></label>}
      <button type="submit" disabled={busy} className="buyer-primary">{busy?"Обработка…":tab==="register"?"Продолжить":"Войти"}</button>
