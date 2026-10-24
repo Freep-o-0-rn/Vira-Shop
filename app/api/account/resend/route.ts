@@ -36,7 +36,7 @@ export async function POST(req:NextRequest){
    await client.query("ROLLBACK");return bad("Лимит писем на этот адрес исчерпан. Повторите через час.",429);
   }
   await client.query(`UPDATE shop_customer_signup_codes SET code_hash=$2,
-    expires_at=LEAST(NOW()+INTERVAL '10 minutes',registration_expires_at),
+    expires_at=NOW()+INTERVAL '10 minutes',
     resend_after=NOW()+INTERVAL '60 seconds',
     failed_attempts=0,
     sent_in_window=CASE WHEN window_started_at<NOW()-INTERVAL '1 hour' THEN 1 ELSE sent_in_window+1 END,
@@ -54,5 +54,5 @@ export async function POST(req:NextRequest){
    [email,hash]).catch(()=>{});
   return bad("Не удалось отправить код. Повторите попытку.",503);
  }
- return NextResponse.json({ok:true,expiresInSeconds:Math.min(600,rowRemaining),registrationExpiresInSeconds:rowRemaining},{headers:noStore});
+ return NextResponse.json({ok:true,expiresInSeconds:600,registrationExpiresInSeconds:rowRemaining},{headers:noStore});
 }
