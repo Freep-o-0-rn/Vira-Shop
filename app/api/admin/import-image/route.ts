@@ -12,8 +12,8 @@ export async function POST(request: NextRequest) {
     if (!localUploadsAllowed()) {
       return NextResponse.json({ error: "Загрузка отключена. На собственном сервере включите VIRA_LOCAL_UPLOADS=1." }, { status: 501 });
     }
-    const body = await readJson(request);
-    if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.url !== "string")
+    const body: unknown = await readJson(request);
+    if (!body || typeof body !== "object" || Array.isArray(body) || !("url" in body) || typeof body.url !== "string")
       return NextResponse.json({ error: "Укажите HTTPS-ссылку на фотографию." }, { status: 400 });
     const url = await importImage(body.url);
     return NextResponse.json({ url }, { status: 201 });
