@@ -68,6 +68,7 @@ export default function AccountPortal(){
     }
    }else await api("/api/account/session",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({email,password})});
+   setDeletionStarted(false);setDeletionCode("");setDeletionAgreed(false);
    setPassword("");setConfirmPassword("");await refresh();setNotice("Вход выполнен.");
   }catch(e){setError(e instanceof Error?e.message:"Ошибка входа.");}
   finally{setBusy(false);}
@@ -126,6 +127,7 @@ export default function AccountPortal(){
     body:JSON.stringify({currentPassword:oldPassword,newPassword:nextPassword})});
    setOldPassword("");setNextPassword("");setRepeatPassword("");
    setCustomer(null);setAddresses([]);setOrders([]);setTab("login");
+   setDeletionStarted(false);setDeletionCode("");setDeletionAgreed(false);
    setNotice("Пароль обновлён. Для безопасности войдите заново.");
   }catch(e){setError(e instanceof Error?e.message:"Не удалось изменить пароль.");}
   finally{setBusy(false);}
@@ -155,6 +157,7 @@ export default function AccountPortal(){
   setBusy(true);try{
    await api("/api/account/session",{method:"DELETE"});
    setCustomer(null);setAddresses([]);setOrders([]);setNotice("");setError("");
+   setDeletionStarted(false);setDeletionCode("");setDeletionAgreed(false);
   }catch(e){setError(e instanceof Error?e.message:"Ошибка выхода.");}
   finally{setBusy(false);}
  }
