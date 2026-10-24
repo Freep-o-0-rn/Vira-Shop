@@ -1,4 +1,3 @@
-import { publicImageUrl } from "@/lib/public-image-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -62,7 +61,7 @@ export default async function ProductPage({params}:Params) {
       <h2>Похожие товары</h2>
       <div className="product-related-grid">{similar.map(p=>
         <Link href={"/product/"+encodeURIComponent(p.id)} className="product-related-item" key={p.id}>
-          {p.image?<img src={publicImageUrl(p.image)} alt={p.title} loading="lazy"/>:<div className="product-image-placeholder">📦</div>}
+          {p.image?<img src={p.image} alt={p.title} loading="lazy"/>:<div className="product-image-placeholder">📦</div>}
           <strong>{rub(p.price)}</strong><span>{p.title}</span>
         </Link>
       )}</div>

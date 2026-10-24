@@ -1,5 +1,4 @@
 "use client";
-import { publicImageUrl } from "@/lib/public-image-url";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {EMOJI_CHOICES,suggestCategoryEmoji,suggestedSpecs,fillMissingSpecs,type Specification} from "@/lib/admin-form-helpers";
 import dynamic from "next/dynamic";
@@ -276,11 +275,11 @@ export default function AdminDashboard({login}:{login:string}) {
                 {p.active?
                   <a className="admin-product-link" href={"/product/"+encodeURIComponent(p.id)}
                      target="_blank" rel="noopener noreferrer" title="Открыть карточку товара в магазине (новая вкладка)">
-                    {p.image?<img src={publicImageUrl(p.image)} alt="" loading="lazy"/>:<span className="admin-product-icon">📦</span>}
+                    {p.image?<img src={p.image} alt="" loading="lazy"/>:<span className="admin-product-icon">📦</span>}
                     <span className="admin-product-meta"><strong>{p.title}</strong><small>{p.id} · {categories.find(c=>c.id===p.category)?.title??p.category}</small></span>
                   </a>:
                   <div className="admin-product-link admin-product-hidden" title="Сначала нажмите «Показать», чтобы открыть карточку в магазине">
-                    {p.image?<img src={publicImageUrl(p.image)} alt="" loading="lazy"/>:<span className="admin-product-icon">📦</span>}
+                    {p.image?<img src={p.image} alt="" loading="lazy"/>:<span className="admin-product-icon">📦</span>}
                     <span className="admin-product-meta"><strong>{p.title}</strong><small>{p.id} · {categories.find(c=>c.id===p.category)?.title??p.category}</small></span>
                   </div>}
               </div></td>

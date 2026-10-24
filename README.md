@@ -1,18 +1,12 @@
-# Vira Shop 0.15.2 — Windows startup diagnostics
+## v54.shop — вход администратора и фотографии
 
-**Important:** requires Windows 10/11 x64, Node.js 22+ and Windows PowerShell 5.1.
-On Windows 7/8/8.1 the current Next.js 16 application cannot run; the launchers
-now report that limitation before trying to install anything. Missing Node.js
-or npm is also shown as a clear error.
+- Используйте стабильную версию **0.15.1**. Картинки демонстрационных товаров теперь запрашиваются через `/api/demo-image/{photo-id}` на домене магазина, а не напрямую с телефона на Unsplash.
+- При первом запросе Next.js загружает JPEG с Unsplash либо через запасной сервис, затем сохраняет его в `public/uploads/demo-photo-cache/`. Если оба источника недоступны с Windows-сервера, будет ошибка HTTP 502; **первоначальные бинарные фотографии в репозиторий не включены**.
+- Для админки на `https://v54.shop/admin/login` установите `APP_ORIGIN=https://v54.shop` в локальном `.env.local`, затем перезапустите Next.js. Ошибка «Недопустимый источник запроса» означает, что проверка Origin не пройдена, а не ошибку пароля. Не выключайте проверку CSRF.
+- Для загрузки фотографий из админки в production на постоянный собственный сервер задайте `VIRA_LOCAL_UPLOADS=1` в `.env.local`. Обязательно сохраняйте в резервной копии `data/` и `public/uploads/`.
+- Изменения категорий и фотографий через админку не требуют пересборки сайта. Разовая сборка выполняется только после обновления кода: `npm.cmd run build`, далее обычный BAT-файл запуска.
 
-See [WINDOWS-SETUP.md](WINDOWS-SETUP.md) for `winver` and `node/npm`
-diagnostics. The starter now avoids `$PSScriptRoot` for legacy PowerShell,
-and setup/admin scripts reuse the same preflight.
-
-This is a launcher-only fix; no database migration is required.
-
----
-
+# Vira Shop 0.15.1 — логистика, закупка под заказ и основа выбора ПВЗ Ozon
 
 Платёжная система **не подключена**. Заказы оформляются как заявки без списания денег.
 

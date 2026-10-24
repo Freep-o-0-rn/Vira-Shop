@@ -1,5 +1,4 @@
 "use client";
-import { publicImageUrl } from "@/lib/public-image-url";
 import {useRef,useState,type DragEvent,type ChangeEvent} from "react";
 
 const MAX_IMAGES=8;
@@ -57,43 +56,22 @@ export default function AdminImageManager({images,onChange,onBusyChange,disabled
     }
   }
 
-  async function addUrl(){
+  function addUrl(){
     if(busy)return;
     const value=url.trim();
     if(!value)return;
     if(images.length>=MAX_IMAGES){setError("Достигнут лимит 8 фотографий.");return;}
-    setError("");
     try{
-      if(value.startsWith("/uploads/")){
-        if(!/^\/uploads\/[a-f0-9-]{36}\.(png|jpe?g|webp)$/.test(value))
-          throw new Error("Некорректная локальная ссылка.");
-        if(images.includes(value))throw new Error("Это изображение уже добавлено.");
-        onChange([...images,value]);setUrl("");return;
+      if(!value.startsWith("/uploads/")){
+        const parsed=new URL(value);
+        if(parsed.protocol!=="https:"||parsed.username||parsed.password||value.length>1500)
+          throw new Error("Введите HTTPS-ссылку на изображение.");
+      }else if(!/^\/uploads\/[a-f0-9-]{36}\.(png|jpe?g|webp)$/.test(value)){
+        throw new Error("Некорректная локальная ссылка.");
       }
-      const parsed=new URL(value);
-      if(parsed.protocol!=="https:"||parsed.username||parsed.password||value.length>1500)
-        throw new Error("Введите HTTPS-ссылку на изображение.");
-      setUploading(true);onBusyChange(true);
-      setProgress("Сохраняем изображение с сайта-источника...");
-      const response=await fetch("/api/admin/import-image",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({url:value}),cache:"no-store"
-      });
-      let data:{url?:string;error?:string}={};
-      try{data=await response.json() as {url?:string;error?:string};}catch{}
-      if(response.status===401){
-        window.location.assign("/admin/login");
-        throw new Error("Сессия администратора завершилась.");
-      }
-      if(!response.ok||typeof data.url!=="string")
-        throw new Error(data.error||"Не удалось скачать изображение.");
-      if(images.includes(data.url))throw new Error("Изображение уже добавлено.");
-      onChange([...images,data.url]);setUrl("");
-      setProgress("Фотография сохранена на сервере. Нажмите «Сохранить товар».");
-    }catch(err){
-      setError(err instanceof Error?err.message:"Не удалось добавить изображение.");
-      setProgress("");
-    }finally{setUploading(false);onBusyChange(false);}
+      if(images.includes(value)){setError("Это изображение уже добавлено.");return;}
+      onChange([...images,value]);setUrl("");setError("");
+    }catch(err){setError(err instanceof Error?err.message:"Некорректная ссылка.");}
   }
 
   function move(from:number,to:number){
@@ -139,7 +117,7 @@ export default function AdminImageManager({images,onChange,onBusyChange,disabled
         onDragEnd={()=>setDragIndex(null)}
         onDragOver={e=>{if(dragIndex!==null){e.preventDefault();e.dataTransfer.dropEffect="move";}}}
         onDrop={e=>{if(dragIndex!==null){e.preventDefault();e.stopPropagation();move(dragIndex,i);setDragIndex(null);}}}>
-        <div className="admin-image-preview"><img src={publicImageUrl(src)} alt={"Фотография товара "+(i+1)}
+        <div className="admin-image-preview"><img src={src} alt={"Фотография товара "+(i+1)}
           loading="lazy" onError={e=>{e.currentTarget.style.opacity="0.25";}}/>
           {i===0&&<span className="admin-image-cover-badge">Главная</span>}
           <span className="admin-image-order-badge">{i+1}</span>

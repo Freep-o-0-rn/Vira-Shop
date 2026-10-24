@@ -40,8 +40,8 @@ jobs:
       - name: API integration tests (embedded local DB)
         run: |
           npm run start -- --port 3000 > /tmp/vira-server.log 2>&1 &
-          echo "Testing dynamic photo uploads"
-          node scripts/smoke-image-serving.mjs || (cat /tmp/vira-server.log && exit 1)
+          echo "Testing original homepage, catalog and demo-image routes"
+          timeout 50s node scripts/smoke-demo-images.mjs || (cat /tmp/vira-server.log && exit 1)
           echo "Testing admin API"
           timeout 110s node scripts/smoke-admin.mjs || (cat /tmp/vira-server.log && exit 1)
           echo "Testing catalog API"
@@ -69,9 +69,6 @@ jobs:
       - name: Test Windows startup script
         shell: cmd
         run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts\start-windows.ps1 -CheckOnly
-      - name: Validate Windows production build repair script
-        shell: cmd
-        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts\repair-v54-404-windows.ps1 -CheckOnly
       - name: Install application dependencies on Windows
         run: npm install --no-audit --no-fund
       - name: Verify Windows data transfer, backup and locked database protection
@@ -81,12 +78,8 @@ jobs:
         run: npm run db:seed
       - name: Repeat initialization without destroying data
         run: npm run db:seed
-      - name: Build Next.js production on Windows
-        run: npm run build
-      - name: Verify Windows production homepage and catalog
-        run: node scripts/test-production-routes.mjs
 
-  windows-node22:
+  stable-windows-node22:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,5 +87,6 @@ jobs:
         with:
           node-version: '22.20.0'
       - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
       - run: npm run build
       - run: node scripts/test-production-routes.mjs

@@ -3,14 +3,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-# Resolve the script path without $PSScriptRoot (unavailable on PowerShell 2.0).
-# Older Windows must get a clear compatibility error, not a Split-Path null error.
-$scriptPath = $MyInvocation.MyCommand.Path
-if ([string]::IsNullOrEmpty($scriptPath)) {
-    Write-Host "STARTUP ERROR: Cannot determine the script path. Run START-WINDOWS.bat from the extracted project folder." -ForegroundColor Red
-    exit 1
-}
-$projectRoot = Split-Path -Parent (Split-Path -Parent $scriptPath)
+$projectRoot = Split-Path -Parent $PSScriptRoot
 $logPath = Join-Path $projectRoot "vira-startup.log"
 $transcriptStarted = $false
 $exitCode = 0
@@ -27,24 +20,8 @@ try {
     Write-Host "Log: $logPath"
     Write-Host ""
 
-    # Windows 7/8.x cannot run the Node.js 22 runtime required by this shop.
-    # Read the true build from the registry: OSVersion can report a legacy version
-    # on processes without the Windows 10/11 compatibility manifest.
-    $osInfo = Get-ItemProperty -LiteralPath "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
-    $windowsBuild = [int]$osInfo.CurrentBuildNumber
-    if ($windowsBuild -lt 10240) {
-        throw "Unsupported Windows version (build $windowsBuild). Vira Shop requires 64-bit Windows 10/11 and Node.js 22+. Windows 7/8/8.1 cannot run this version. Use a compatible computer or a Linux server."
-    }
-    if ($PSVersionTable.PSVersion.Major -lt 5) {
-        throw "PowerShell 5.1 is required. Upgrade Windows PowerShell, then restart the launcher."
-    }
-
-    if (-not (Get-Command node.exe -ErrorAction SilentlyContinue)) {
-        throw "Node.js is not installed or not in PATH. Install Node.js 22 or newer (Windows x64) from https://nodejs.org/, close this window, and open START-WINDOWS.bat again."
-    }
-    if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) {
-        throw "npm.cmd is not in PATH. Node.js installs npm. Repair/reinstall Node.js 22+ from https://nodejs.org/, then reopen this window."
-    }
+    $null = Get-Command node.exe -ErrorAction Stop
+    $null = Get-Command npm.cmd -ErrorAction Stop
 
     $nodeVersion = (& node.exe --version).Trim()
     if ($LASTEXITCODE -ne 0) {
@@ -118,8 +95,9 @@ try {
 catch {
     Write-Host ""
     Write-Host "STARTUP ERROR: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "Diagnostics: run winver, node --version, and npm --version from cmd.exe." -ForegroundColor Yellow
-    Write-Host "See WINDOWS-SETUP.md for supported Windows versions and troubleshooting." -ForegroundColor Yellow
+    if ($_.Exception.Message -match "Get-Command") {
+        Write-Host "Install Node.js LTS from https://nodejs.org/ and restart Windows Terminal." -ForegroundColor Yellow
+    }
     $exitCode = 1
 }
 finally {

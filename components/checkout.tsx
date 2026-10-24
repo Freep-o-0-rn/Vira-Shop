@@ -1,5 +1,4 @@
 "use client";
-import { publicImageUrl } from "@/lib/public-image-url";
 import {useEffect,useRef,useState} from "react";
 import Link from "next/link";
 type Address={id:string;recipient:string;phone:string;city:string;street:string;building:string;apartment:string};
@@ -148,7 +147,7 @@ export default function Checkout(){
    <div className="buyer-layout">
     <section className="buyer-panel"><h2>Товары в корзине</h2>
      {cart.length?cart.map(p=><div className="checkout-line" key={p.id+":"+(p.variantId??"")}>
-      {p.image?<img src={publicImageUrl(p.image)} alt=""/>:<span>📦</span>}
+      {p.image?<img src={p.image} alt=""/>:<span>📦</span>}
       <div className="checkout-line-title"><strong>{p.title}</strong>
        <small>{money(Number(p.priceMinor))} / шт.</small>
        {p.variantId&&<small>Артикул: {p.variantId}</small>}
