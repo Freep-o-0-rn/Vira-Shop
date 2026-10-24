@@ -64,7 +64,7 @@ export default function AccountPortal(){
        "/api/account/pending",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify(pending)});
       if(!active)return;
-      if(result.pending&&result.registrationExpiresInSeconds){
+      if(result.pending&&((result.registrationExpiresInSeconds||0)>0||(result.codeExpiresInSeconds||0)>0)){
        setVerificationEmail(result.email||pending.email);
        setEmail(result.email||pending.email);
        setSignupResumeToken(pending.resumeToken);
@@ -83,7 +83,7 @@ export default function AccountPortal(){
   const timer=setInterval(()=>{
    const now=Date.now();
    setClock(now);
-   if(signupExpiresAt&&now>=signupExpiresAt){
+   if(signupExpiresAt&&now>=signupExpiresAt&&now>=codeExpiresAt){
     localStorage.removeItem(PENDING_KEY);
     setVerificationEmail("");setVerificationCode("");setSignupResumeToken("");
     setSignupExpiresAt(0);setCodeExpiresAt(0);
@@ -92,7 +92,7 @@ export default function AccountPortal(){
    }
   },1000);
   return()=>clearInterval(timer);
- },[verificationEmail,signupExpiresAt]);
+ },[verificationEmail,signupExpiresAt,codeExpiresAt]);
  async function submit(event:FormEvent<HTMLFormElement>){
   event.preventDefault();setBusy(true);setError("");setNotice("");
   try{
@@ -236,7 +236,7 @@ export default function AccountPortal(){
    <section className="buyer-auth buyer-panel">
     <h2>Подтвердите почту</h2>
     <p className="buyer-muted">Мы отправили код на <strong>{verificationEmail}</strong>.
-     Время на завершение регистрации — 30 минут.</p>
+     Новый код можно запросить в течение 30 минут с начала регистрации. Последний код действует полные 10 минут, даже если 30 минут уже прошли.</p>
     <p className="buyer-otp-timer">{codeExpiresAt>clock
      ?"Код действует ещё "+Math.max(0,Math.ceil((codeExpiresAt-Date.now())/60000))+" мин."
      :"Код истёк. Запросите новый."}</p>
@@ -250,7 +250,7 @@ export default function AccountPortal(){
     </form>
     <p className="buyer-spam-hint"><span aria-hidden="true">✉️</span> Не нашли письмо? Проверьте папки <strong>«Спам»</strong> и <strong>«Рассылки»</strong>. Доставка может занять несколько минут.</p>
     <div className="buyer-auth-actions">
-     <button type="button" disabled={busy} onClick={()=>void resendCode()}>Отправить код повторно</button>
+     <button type="button" disabled={busy||(signupExpiresAt>0&&Date.now()>=signupExpiresAt)} onClick={()=>void resendCode()}>Отправить код повторно</button>
      <button type="button" disabled={busy} onClick={changeSignupEmail}>Изменить email</button>
     </div>
    </section>:
