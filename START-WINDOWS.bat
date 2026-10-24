@@ -1,9 +1,9 @@
-@echo off
+﻿@echo off
 setlocal EnableExtensions
 chcp 65001 >nul
 cd /d "%~dp0"
 if errorlevel 1 goto :bad_folder
-title Vira Shop - Local Development Server
+title V54.shop - Next.js + Caddy
 echo.
 echo ====================================================
 echo           VIRA SHOP - LOCAL SERVER
@@ -18,6 +18,14 @@ if errorlevel 1 (
     echo Run: npm install ^&^& npm run dev
     goto :finished_error
 )
+echo Checking and starting Caddy (C:\Caddy\caddy.exe)...
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\ensure-caddy-windows.ps1"
+if errorlevel 1 (
+    echo ERROR: Caddy could not start. Next.js was not launched.
+    goto :finished_error
+)
+echo.
+echo Starting the existing, working Next.js development server...
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\start-windows.ps1"
 if errorlevel 1 goto :finished_error
 echo.

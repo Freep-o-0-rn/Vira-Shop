@@ -120,14 +120,14 @@ const galleryProduct=await check("/api/admin/products",{
 });
 const galleryDetails=(await check("/api/products/"+galleryProduct.data.id)).data.item;
 assert.equal(galleryDetails.image,uploaded.json.url);
-assert.deepEqual(galleryDetails.images,[uploaded.json.url,"/api/demo-image/photo-1505740420928-5e560c06d30e"]);
+assert.deepEqual(galleryDetails.images,[uploaded.json.url,product.image]);
 await check("/api/admin/products/"+galleryProduct.data.id,{
   method:"PUT",body:{...generated,id:galleryProduct.data.id,category:"electronics",image:product.image,
     images:[product.image,uploaded.json.url]},...auth
 });
 const reordered=(await check("/api/products/"+galleryProduct.data.id)).data.item;
-assert.equal(reordered.image,"/api/demo-image/photo-1505740420928-5e560c06d30e");
-assert.deepEqual(reordered.images,["/api/demo-image/photo-1505740420928-5e560c06d30e",uploaded.json.url]);
+assert.equal(reordered.image,product.image);
+assert.deepEqual(reordered.images,[product.image,uploaded.json.url]);
 
 await check("/api/admin/session",{method:"DELETE",...auth});
 await check("/api/admin/products",{status:401,cookie});

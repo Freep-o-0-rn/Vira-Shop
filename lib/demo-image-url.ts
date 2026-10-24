@@ -1,5 +1,6 @@
-/** Rewrite only known Unsplash image URLs to a first-party image endpoint.
- * Existing uploaded photos and other HTTPS images are not modified.
+/**
+ * Rewrite only Unsplash image URLs to V54.shop's same-origin image endpoint.
+ * Everything else (admin uploads, external images, etc.) is unchanged.
  */
 export function localDemoPhoto(src: string): string {
   if (!src || !src.startsWith("https://images.unsplash.com/")) return src;

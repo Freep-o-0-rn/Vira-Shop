@@ -4,7 +4,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
-// No user-supplied upstream URLs: only a validated Unsplash photo ID is accepted.
+// Only product-photo IDs are accepted; users cannot supply a URL/host.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -32,8 +32,8 @@ async function downloadWithNode(url: string): Promise<Buffer> {
 }
 
 async function downloadWithCurl(url: string): Promise<Buffer> {
-  // Fallback for Windows servers where curl.exe uses different proxy or TLS settings.
-  // The request is invoked without a shell, and the remote URL is constructed here.
+  // Windows curl.exe can use different proxy / system certificate settings
+  // than Node.js fetch. No shell is involved and URLs are server-generated.
   const { stdout } = await execFileAsync("curl.exe", [
     "--fail", "--location", "--silent", "--show-error", "--max-time", "18",
     "--proto", "=https", "--proto-redir", "=https", url,
@@ -44,6 +44,7 @@ async function downloadWithCurl(url: string): Promise<Buffer> {
 }
 
 async function fetchPhoto(id: string): Promise<Buffer> {
+  // Source domain and URL format are fixed; client-controlled URLs are rejected.
   const original = `https://images.unsplash.com/${id}?fit=crop&w=650&q=80&fm=jpg`;
   const alternate = `https://wsrv.nl/?url=${encodeURIComponent("images.unsplash.com/" + id)}&w=650&q=80&output=jpg`;
   let lastError: unknown;
@@ -92,6 +93,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   }
   try {
     const image = await task;
+    // Copy to a plain ArrayBuffer for compatibility with TypeScript's BodyInit.
     const body = new ArrayBuffer(image.byteLength);
     new Uint8Array(body).set(image);
     return new Response(body, { headers: {
