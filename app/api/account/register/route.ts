@@ -1,4 +1,4 @@
-import {randomInt} from "node:crypto";
+import {createHash,randomBytes,randomInt} from "node:crypto";
 import {sendVerificationEmail,verificationEnabled,verificationReady} from "@/lib/server/customer-mail";
 import {NextRequest,NextResponse} from "next/server";
 import {getPool} from "@/lib/server/db";
@@ -18,11 +18,15 @@ export async function POST(req:NextRequest){
   if(!verificationReady())return bad("Подтверждение почты ещё не настроено. Попробуйте позже.",503);
   if((b.password as string).length<8)return bad("Пароль должен содержать не менее 8 символов.");
   const code=randomInt(0,1000000).toString().padStart(6,"0");
+  const cancelToken=randomBytes(32).toString("hex");
+  const cancelTokenHash=createHash("sha256").update(cancelToken).digest("hex");
   const hashedPassword=await hashPassword(b.password as string);
   const hashedCode=await hashPassword(code);
   const client=await getPool().connect();
   try{
    await client.query("BEGIN");
+   // Opportunistic cleanup of stale unconfirmed signups. No active customer rows are touched.
+   await client.query("DELETE FROM shop_customer_signup_codes WHERE expires_at < NOW()-INTERVAL '24 hours'");
    const registered=await client.query("SELECT id FROM shop_customers WHERE lower(email)=$1",[email]);
    if(registered.rowCount){
     await client.query("ROLLBACK");return bad("Этот email уже зарегистрирован.",409);
@@ -38,16 +42,17 @@ export async function POST(req:NextRequest){
     await client.query("ROLLBACK");return bad("Слишком много запросов. Попробуйте через час.",429);
    }
    await client.query(`INSERT INTO shop_customer_signup_codes
-    (email,name,password_hash,code_hash,expires_at,resend_after,window_started_at,sent_in_window,failed_attempts)
-    VALUES($1,$2,$3,$4,NOW()+INTERVAL '10 minutes',NOW()+INTERVAL '60 seconds',NOW(),1,0)
+    (email,name,password_hash,code_hash,expires_at,resend_after,window_started_at,sent_in_window,failed_attempts,cancel_token_hash)
+    VALUES($1,$2,$3,$4,NOW()+INTERVAL '10 minutes',NOW()+INTERVAL '60 seconds',NOW(),1,0,$5)
     ON CONFLICT(email) DO UPDATE SET
      name=EXCLUDED.name,password_hash=EXCLUDED.password_hash,code_hash=EXCLUDED.code_hash,
+     cancel_token_hash=EXCLUDED.cancel_token_hash,
      expires_at=EXCLUDED.expires_at,resend_after=EXCLUDED.resend_after,failed_attempts=0,
      sent_in_window=CASE WHEN shop_customer_signup_codes.window_started_at<NOW()-INTERVAL '1 hour'
       THEN 1 ELSE shop_customer_signup_codes.sent_in_window+1 END,
      window_started_at=CASE WHEN shop_customer_signup_codes.window_started_at<NOW()-INTERVAL '1 hour'
       THEN NOW() ELSE shop_customer_signup_codes.window_started_at END`,
-    [email,name,hashedPassword,hashedCode]);
+    [email,name,hashedPassword,hashedCode,cancelTokenHash]);
    await client.query("COMMIT");
   }catch(err){
    try{await client.query("ROLLBACK");}catch{}
@@ -61,7 +66,7 @@ export async function POST(req:NextRequest){
     [email,hashedCode]).catch(()=>{});
    return bad("Не удалось отправить код. Проверьте адрес и повторите попытку.",503);
   }
-  return NextResponse.json({verificationRequired:true,email,expiresInSeconds:600},
+  return NextResponse.json({verificationRequired:true,email,cancelToken,expiresInSeconds:600},
    {status:202,headers:noStore});
  }
  try{
