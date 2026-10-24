@@ -1,3 +1,4 @@
+import { localDemoPhoto } from "@/lib/demo-image-url";
 // Демонстрационные данные. Цены, скидки, наличие и отзывы вымышлены.
 export type Category = string;
 export type ProductSpec = { name: string; value: string };
@@ -10,7 +11,7 @@ export const categories: StoreCategory[] = [
   { id: "sports", title: "Спорт", emoji: "👟", tone: "green" },
   { id: "accessories", title: "Аксессуары", emoji: "⌚", tone: "lilac" },
 ];
-const u = (id: string) => "https://images.unsplash.com/" + id + "?auto=format&fit=crop&w=650&q=80";
+const u = (id: string) => localDemoPhoto("https://images.unsplash.com/" + id + "?auto=format&fit=crop&w=650&q=80");
 export const products: Product[] = [
   { id:"p1", title:"Беспроводные наушники", subtitle:"Шумоподавление · до 30 часов", category:"electronics", price:3490, oldPrice:5990, rating:4.9, reviews:248, image:u("photo-1505740420928-5e560c06d30e"), badge:"Хит", description:"Удобные наушники для музыки, работы и поездок. Учебная карточка товара." },
   { id:"p2", title:"Умные часы", subtitle:"Мониторинг активности · Bluetooth", category:"electronics", price:4990, oldPrice:7490, rating:4.8, reviews:187, image:u("photo-1523275335684-37898b6baf30"), badge:"−33%", description:"Стильные часы для уведомлений и повседневной активности. Учебная карточка." },
