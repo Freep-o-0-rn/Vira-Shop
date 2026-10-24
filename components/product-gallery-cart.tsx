@@ -1,4 +1,5 @@
 "use client";
+import { publicImageUrl } from "@/lib/public-image-url";
 import {useEffect,useState} from "react";
 import type {Product} from "@/lib/catalog";
 import type {VariantGroup,StoreVariant} from "@/lib/variants";
@@ -95,13 +96,13 @@ export default function ProductGalleryAndCart({product,variantData}:{product:Pro
  return <div className="product-detail-grid">
   <div className="product-detail-media">
    <div className="product-detail-main-photo">
-    {images.length?<img src={images[activeImage]??images[0]} alt={product.title}/>:
+    {images.length?<img src={publicImageUrl(images[activeImage]??images[0])} alt={product.title}/>:
      <div className="product-image-placeholder">📦</div>}
    </div>
    {images.length>1&&<div className="product-gallery-thumbs" aria-label="Фотографии товара">
     {images.map((src,i)=><button key={src+i} type="button" aria-label={"Показать фото "+(i+1)}
       aria-pressed={i===activeImage} className={i===activeImage?"selected":""} onClick={()=>setActiveImage(i)}>
-       <img src={src} alt=""/></button>)}
+       <img src={publicImageUrl(src)} alt=""/></button>)}
    </div>}
   </div>
   <div className="product-detail-info">
@@ -124,7 +125,7 @@ export default function ProductGalleryAndCart({product,variantData}:{product:Pro
           className={"product-variant-option "+group.type+(selected?" selected":"")}
           onClick={()=>select(i,value.label)}>
           {group.type==="color"&&<span className="product-variant-dot" style={{backgroundColor:value.color??"#cccccc"}}/>}
-          {group.type==="image"&&value.image&&<img src={value.image} alt=""/>}
+          {group.type==="image"&&value.image&&<img src={publicImageUrl(value.image)} alt=""/>}
           <span>{value.label}</span>
           {availability==="sold-out"&&<small aria-hidden="true">Нет</small>}
           {availability==="changes-other-options"&&<small aria-hidden="true">↗</small>}
