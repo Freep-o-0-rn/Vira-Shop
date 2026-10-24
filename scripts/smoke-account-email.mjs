@@ -58,4 +58,47 @@ await call("/api/account/password",{method:"POST",cookie:verified.cookie,
 assert.equal((await call("/api/account/session",{cookie:verified.cookie})).data.customer,null);
 const login=await call("/api/account/session",{method:"POST",body:{email,password:"Changed-test-pass-2026"}});
 assert.ok(login.cookie);
-console.log("Verified customer registration, profile, address edit and password rotation passed.");
+
+// Create an unfinished order and prove deletion cannot break its fulfillment.
+const admin=await call("/api/admin/session",{method:"POST",
+ body:{login:"testadmin",password:"test-only-strong-password-123"}});
+const productId="delete_fixture_"+randomUUID().slice(0,8);
+await call("/api/admin/products",{method:"POST",status:201,cookie:admin.cookie,
+ body:{id:productId,category:"electronics",title:"Test deletion order",subtitle:"CI",
+ description:"Fixture",price:"100.00",oldPrice:"",stock:2,active:true,
+ image:"",images:[],specs:[],badge:""}});
+await call("/api/account/cart",{method:"POST",cookie:login.cookie,
+ body:{items:[{id:productId,quantity:1}]}});
+const order=await call("/api/account/orders",{method:"POST",status:201,cookie:login.cookie,
+ body:{key:randomUUID(),addressId:added.data.id,note:""}});
+await call("/api/account/delete/request",{method:"POST",cookie:login.cookie,status:409});
+assert.equal((await call("/api/account/session",{cookie:login.cookie})).data.customer.email,email);
+
+// Cancel the unfinished order; history should survive removal of its customer.
+await call("/api/admin/orders/"+order.data.id,{method:"PATCH",cookie:admin.cookie,body:{status:"cancelled"}});
+await call("/api/account/delete/request",{method:"POST",cookie:login.cookie});
+const deleteMail=JSON.parse(readFileSync(outbox,"utf8"));
+assert.equal(deleteMail.to,email);
+assert.equal(deleteMail.kind,"delete");
+assert.match(deleteMail.code,/^\d{6}$/);
+await call("/api/account/delete/request",{method:"POST",cookie:login.cookie,status:429});
+await call("/api/account/delete/confirm",{method:"POST",cookie:login.cookie,status:400,
+ body:{code:deleteMail.code,confirm:false}});
+await call("/api/account/delete/confirm",{method:"POST",cookie:login.cookie,status:400,
+ body:{code:deleteMail.code==="111111"?"222222":"111111",confirm:true}});
+const deleted=await call("/api/account/delete/confirm",{method:"POST",cookie:login.cookie,
+ body:{code:deleteMail.code,confirm:true}});
+assert.equal(deleted.data.deleted,true);
+assert.ok(deleted.cookie?.includes("vira_customer_session="));
+assert.equal((await call("/api/account/session",{cookie:login.cookie})).data.customer,null);
+await call("/api/account/addresses",{cookie:login.cookie,status:401});
+await call("/api/account/session",{method:"POST",status:401,body:{email,password:"Changed-test-pass-2026"}});
+const history=await call("/api/admin/orders?q="+order.data.id,{cookie:admin.cookie});
+const historical=history.data.items.find(x=>x.id===order.data.id);
+assert.ok(historical,"Historical order was lost when customer was deleted");
+assert.equal(historical.customerName,"Удалённый покупатель");
+assert.equal(historical.customerEmail,"");
+assert.equal(historical.status,"cancelled");
+await call("/api/account/register",{method:"POST",status:202,
+ body:{email,name:"New Customer",password:"Fresh-password-2026"}});
+console.log("Verified signup, account edits, deletion OTP, active-order guard and preserved history passed.");

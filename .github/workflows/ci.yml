@@ -87,6 +87,8 @@ jobs:
     env:
       APP_ORIGIN: http://127.0.0.1:3000
       ACCOUNT_EMAIL_VERIFICATION: '1'
+      VIRA_ADMIN_LOGIN: testadmin
+      VIRA_ADMIN_PASSWORD: test-only-strong-password-123
       SMTP_HOST: localhost
       SMTP_PORT: '1465'
       SMTP_USER: test@v54.shop
@@ -102,6 +104,7 @@ jobs:
           node-version: '24'
       - run: npm install --no-audit --no-fund
       - run: npm run db:seed
+      - run: npm run admin:create
       - run: npm run typecheck
       - run: npm run build
       - run: node --experimental-strip-types scripts/test-smtp.mjs --check

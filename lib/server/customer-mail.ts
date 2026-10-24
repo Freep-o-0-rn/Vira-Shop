@@ -47,7 +47,7 @@ function checkOutgoingQuota(){
 }
 
 // One SMTP connection per email: properly handle multiline responses and TLS failures.
-export async function sendVerificationEmail(recipient:string,code:string):Promise<void>{
+export async function sendVerificationEmail(recipient:string,code:string,purpose:"signup"|"account-delete"="signup"):Promise<void>{
  const host=smtpInput(process.env.SMTP_HOST?.trim()||"smtp.yandex.ru","host");
  const port=Number(process.env.SMTP_PORT||"465");
  if(!Number.isSafeInteger(port)||port<1||port>65535)throw new Error("Invalid SMTP port");
@@ -106,20 +106,54 @@ export async function sendVerificationEmail(recipient:string,code:string):Promis
   await expect("MAIL FROM:<"+user+">",[250]);
   await expect("RCPT TO:<"+to+">",[250,251]);
   await expect("DATA",[354]);
+  const deletion=purpose==="account-delete";
+  const subject=deletion?"Подтверждение удаления аккаунта Vira Shop":"Ваш код подтверждения Vira Shop";
+  const headline=deletion?"Подтвердите удаление аккаунта":"Подтвердите вашу почту";
+  const description=deletion?
+   "Введите этот код в личном кабинете, чтобы подтвердить удаление аккаунта Vira Shop.":
+   "Введите этот код на сайте, чтобы завершить регистрацию в Vira Shop.";
+  const text=deletion?
+   "Код подтверждения удаления аккаунта Vira Shop: "+code+
+   "\n\nСрок действия: 10 минут. Никому не сообщайте этот код."+
+   "\nЕсли вы не запрашивали удаление, никому не сообщайте код и проверьте безопасность аккаунта.":
+   "Код подтверждения регистрации в Vira Shop: "+code+
+   "\n\nСрок действия: 10 минут. Никому не сообщайте этот код."+
+   "\nЕсли вы не регистрировались, просто проигнорируйте письмо.";
+  const html=`<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:24px 12px;background:#f4f7ff;font-family:Arial,Helvetica,sans-serif;color:#132443">
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="max-width:520px;width:100%;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #e2e9f7;border-radius:18px">
+<tr><td style="background:#2864ff;height:5px;font-size:0;line-height:5px;border-radius:18px 18px 0 0">&nbsp;</td></tr>
+<tr><td style="padding:32px 30px">
+<p style="margin:0 0 28px;font-size:20px;font-weight:bold;color:#142448"><span style="display:inline-block;background:#2864ff;color:#fff;border-radius:10px;padding:9px 12px;margin-right:9px;font-size:17px">V.</span> vira<span style="color:#2864ff">shop</span></p>
+<h1 style="font-size:24px;line-height:1.25;margin:0 0 14px;color:#132443">${headline}</h1>
+<p style="font-size:14px;line-height:1.7;color:#657690;margin:0 0 22px">${description}</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-radius:14px;background:#eff4ff;border:1px solid #d4e1ff">
+<tr><td style="text-align:center;padding:26px 12px">
+<p style="color:#687da5;font-size:11px;font-weight:bold;letter-spacing:1.3px;margin:0 0 13px">ВАШ КОД ПОДТВЕРЖДЕНИЯ</p>
+<p style="font-size:36px;line-height:1.2;letter-spacing:5px;font-weight:bold;color:#2864ff;margin:0;font-variant-numeric:tabular-nums">${code.slice(0,3)} ${code.slice(3)}</p>
+<p style="font-size:12px;color:#677b9a;margin:13px 0 0">Действует 10 минут</p>
+</td></tr></table>
+<p style="font-size:13px;line-height:1.6;color:#4c5f7c;margin:24px 0 8px"><strong>Не сообщайте этот код никому.</strong> Сотрудники Vira Shop никогда не запрашивают его.</p>
+<p style="font-size:12px;line-height:1.6;color:#8190a8;margin:0 0 24px">${deletion?"Если это действие запросили не вы — просто не вводите код.":"Если вы не регистрировались — просто проигнорируйте письмо."}</p>
+<p style="border-top:1px solid #edf1f8;padding-top:20px;font-size:12px;color:#8696ae;margin:0;text-align:center">Vira Shop · v54.shop<br>Автоматическое сообщение, отвечать не нужно.</p>
+</td></tr></table>
+</body></html>`;
+  const boundary="vira_"+randomBytes(12).toString("hex");
   const headers=[
    "From: Vira Shop <"+user+">",
    "To: <"+to+">",
-   "Subject: "+mimeSubject("Код подтверждения Vira Shop"),
+   "Subject: "+mimeSubject(subject),
    "Date: "+new Date().toUTCString(),
    "Message-ID: <"+randomBytes(12).toString("hex")+"@v54.shop>",
    "MIME-Version: 1.0",
-   "Content-Type: text/plain; charset=UTF-8",
-   "Content-Transfer-Encoding: base64"
+   "Content-Type: multipart/alternative; boundary=\""+boundary+"\""
   ];
-  const body="Код подтверждения регистрации в Vira Shop: "+code+
-   "\n\nСрок действия: 10 минут. Никому не сообщайте этот код."+
-   "\nЕсли вы не регистрировались, просто проигнорируйте письмо.";
-  const msg=headers.join("\r\n")+"\r\n\r\n"+body64(body)+"\r\n.";
+  const msg=headers.join("\r\n")+"\r\n\r\n"+
+   "--"+boundary+"\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"+
+   body64(text)+"\r\n"+
+   "--"+boundary+"\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"+
+   body64(html)+"\r\n--"+boundary+"--\r\n.";
   await expect(msg,[250]);
   try{socket.write("QUIT\r\n");}catch{}
  } finally{socket.destroy();}

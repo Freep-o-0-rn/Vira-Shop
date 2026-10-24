@@ -30,8 +30,9 @@ export async function GET(req:NextRequest,{params}:Ctx){
     o.delivery_fee_minor::text AS "deliveryFeeMinor",
     o.delivery_address AS address,o.buyer_note AS note,
     o.created_at AS "createdAt",o.updated_at AS "updatedAt",
-    c.name AS "customerName",c.email AS "customerEmail"
-    FROM shop_orders o JOIN shop_customers c ON c.id=o.customer_id
+    COALESCE(c.name,'Удалённый покупатель') AS "customerName",
+   COALESCE(c.email,'') AS "customerEmail"
+    FROM shop_orders o LEFT JOIN shop_customers c ON c.id=o.customer_id
     WHERE o.id=$1`,[id]);
   if(!result.rowCount)return NextResponse.json({error:"Заказ не найден."},{status:404});
   const [items,history,logisticsHistory]=await Promise.all([
