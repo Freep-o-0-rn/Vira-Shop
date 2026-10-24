@@ -1,5 +1,5 @@
-import {normalizeVerificationCode} from "@/lib/verification-code";
 "use client";
+import {normalizeVerificationCode} from "@/lib/verification-code";
 import {useEffect,useState,type FormEvent} from "react";
 import Link from "next/link";
 import {DELIVERY_LABELS,LOGISTICS_LABELS,type DeliveryMethod,type LogisticsStatus} from "@/lib/logistics";
