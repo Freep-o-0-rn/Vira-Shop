@@ -34,7 +34,7 @@ export default function OtpCodeInput({id,value,onChange,disabled=false,autoFocus
     disabled={disabled}
    />
    <div aria-hidden="true" className="buyer-otp-digits">
-    {Array.from({length:6},(_,i)=><span key={i} className={"buyer-otp-digit"+(value[i]?" buyer-otp-filled":"")}>
+    {Array.from({length:6},(_,i)=><span key={i} className={"buyer-otp-digit"+(value[i]?" buyer-otp-filled":"")+(i===Math.min(value.length,5)&&value.length<6?" buyer-otp-active":"")}>
       {value[i]||<span className="buyer-otp-underscore"/>}
     </span>)}
    </div>
