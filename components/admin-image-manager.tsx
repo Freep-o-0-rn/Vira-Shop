@@ -1,4 +1,5 @@
 "use client";
+import { publicImageUrl } from "@/lib/public-image-url";
 import {useRef,useState,type DragEvent,type ChangeEvent} from "react";
 
 const MAX_IMAGES=8;
@@ -117,7 +118,7 @@ export default function AdminImageManager({images,onChange,onBusyChange,disabled
         onDragEnd={()=>setDragIndex(null)}
         onDragOver={e=>{if(dragIndex!==null){e.preventDefault();e.dataTransfer.dropEffect="move";}}}
         onDrop={e=>{if(dragIndex!==null){e.preventDefault();e.stopPropagation();move(dragIndex,i);setDragIndex(null);}}}>
-        <div className="admin-image-preview"><img src={src} alt={"Фотография товара "+(i+1)}
+        <div className="admin-image-preview"><img src={publicImageUrl(src)} alt={"Фотография товара "+(i+1)}
           loading="lazy" onError={e=>{e.currentTarget.style.opacity="0.25";}}/>
           {i===0&&<span className="admin-image-cover-badge">Главная</span>}
           <span className="admin-image-order-badge">{i+1}</span>
