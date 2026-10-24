@@ -538,3 +538,19 @@
 .admin-delete-error{font-size:13px;color:#a62a3d;background:#fff2f4;padding:10px 12px;border-radius:8px;margin-top:15px}
 .admin-form-bottom button.admin-delete-confirm{border:0;background:#bd324b;color:#fff;font-size:13px;font-weight:700;border-radius:10px;padding:12px 18px}
 .admin-form-bottom button.admin-delete-confirm:disabled{opacity:.45;cursor:not-allowed}
+
+/* Compact account portal: one active section instead of long open forms. */
+.buyer-layout-single{grid-template-columns:minmax(0,1fr);max-width:920px;margin-inline:auto}
+.buyer-dashboard-tabs{max-width:920px;margin:0 auto 18px;flex-wrap:wrap;gap:8px}
+.buyer-dashboard-tabs button{flex:1 1 138px;min-width:0;text-align:center}
+.buyer-auth-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:15px}
+.buyer-auth-actions button{border:0;background:none;color:#2462ed;font-weight:650;font-size:12px;padding:8px}
+.buyer-address-actions{display:flex;gap:8px}
+.buyer-address-actions button:first-child{color:#2462ed}
+@media(max-width:650px){
+ .buyer-dashboard-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .buyer-dashboard-tabs button{padding:10px 5px;font-size:12px}
+ .buyer-auth{max-width:100%}
+ .buyer-address{align-items:flex-start}
+ .buyer-address-actions{flex-direction:column;align-items:flex-end}
+}
