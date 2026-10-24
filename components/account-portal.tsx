@@ -169,7 +169,7 @@ export default function AccountPortal(){
      <label>Email<input required type="email" autoComplete="email" placeholder="name@example.com" value={email} onChange={e=>setEmail(e.target.value)}/></label>
      <label>Пароль<input required type="password" minLength={tab==="register"&&verificationOn?8:6} maxLength={256}
       autoComplete={tab==="register"?"new-password":"current-password"}
-      placeholder={tab==="register"?"Минимум 8 символов":"Ваш пароль"} value={password} onChange={e=>setPassword(e.target.value)}/></label>
+      placeholder={tab==="register"?(verificationOn?"Минимум 8 символов":"Минимум 6 символов"):"Ваш пароль"} value={password} onChange={e=>setPassword(e.target.value)}/></label>
      {tab==="register"&&<label>Повторите пароль<input required type="password" minLength={verificationOn?8:6} maxLength={256}
       autoComplete="new-password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></label>}
      <button type="submit" disabled={busy} className="buyer-primary">{busy?"Обработка…":tab==="register"?"Продолжить":"Войти"}</button>
