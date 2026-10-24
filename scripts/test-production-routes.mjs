@@ -29,12 +29,15 @@ try {
     await pause(500);
   }
   assert.ok(ready, "Next.js server did not become ready.\n" + output);
-  for (const route of ["/", "/catalog"]) {
+  for (const route of ["/", "/home", "/catalog"]) {
     const res = await fetch(base + route, { redirect: "manual", signal: AbortSignal.timeout(10000) });
     const html = await res.text();
     console.log(`${route}: HTTP ${res.status}, content-type=${res.headers.get("content-type")}, length=${html.length}`);
     if (res.status !== 200) console.error("Page preview:", html.slice(0, 500));
     assert.equal(res.status, 200, `Production route ${route} should return HTTP 200`);
+    if (route === "/" || route === "/home") {
+      assert.ok(html.includes("Хорошие находки."), `Route ${route} must display the homepage, not the catalog`);
+    }
   }
   console.log("Production Windows/Linux routes OK.");
 } finally {
