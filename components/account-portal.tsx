@@ -28,6 +28,10 @@ export default function AccountPortal(){
  const [verificationOn,setVerificationOn]=useState(false);
  const [verificationEmail,setVerificationEmail]=useState(""),[verificationCode,setVerificationCode]=useState("");
  const [addresses,setAddresses]=useState<Address[]>([]),[orders,setOrders]=useState<Order[]>([]);
+ const [section,setSection]=useState<"orders"|"addresses"|"profile"|"security">("orders");
+ const [addressOpen,setAddressOpen]=useState(false),[editAddressId,setEditAddressId]=useState<string|null>(null);
+ const [profileName,setProfileName]=useState("");
+ const [oldPassword,setOldPassword]=useState(""),[nextPassword,setNextPassword]=useState(""),[repeatPassword,setRepeatPassword]=useState("");
  const [address,setAddress]=useState({...EMPTY}),[error,setError]=useState(""),[notice,setNotice]=useState("");
  async function refresh(){
   const [session,a,o]=await Promise.all([
@@ -35,7 +39,7 @@ export default function AccountPortal(){
    api<{items:Address[]}>("/api/account/addresses"),
    api<{items:Order[]}>("/api/account/orders")
   ]);
-  setCustomer(session.customer);setAddresses(a.items);setOrders(o.items);
+  setCustomer(session.customer);if(session.customer)setProfileName(session.customer.name);setAddresses(a.items);setOrders(o.items);
  }
  useEffect(()=>{
   let active=true;
@@ -88,8 +92,10 @@ export default function AccountPortal(){
  async function saveAddress(event:FormEvent<HTMLFormElement>){
   event.preventDefault();setBusy(true);setError("");setNotice("");
   try{
-   await api("/api/account/addresses",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(address)});
-   setAddress({...EMPTY});await refresh();setNotice("Адрес сохранён.");
+   await api("/api/account/addresses",{method:editAddressId?"PUT":"POST",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify({...address,...(editAddressId?{id:editAddressId}:{})})});
+   setAddress({...EMPTY});setAddressOpen(false);setEditAddressId(null);
+   await refresh();setNotice("Адрес сохранён.");
   }catch(e){setError(e instanceof Error?e.message:"Ошибка адреса.");}
   finally{setBusy(false);}
  }
@@ -98,6 +104,28 @@ export default function AccountPortal(){
   setBusy(true);setError("");
   try{await api("/api/account/addresses",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})});await refresh();}
   catch(e){setError(e instanceof Error?e.message:"Ошибка.");}
+  finally{setBusy(false);}
+ }
+ async function saveProfile(event:FormEvent<HTMLFormElement>){
+  event.preventDefault();setBusy(true);setError("");setNotice("");
+  try{
+   const result=await api<{customer:Customer}>("/api/account/profile",{method:"PATCH",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify({name:profileName})});
+   setCustomer(result.customer);setNotice("Имя обновлено.");
+  }catch(e){setError(e instanceof Error?e.message:"Не удалось изменить профиль.");}
+  finally{setBusy(false);}
+ }
+ async function changePassword(event:FormEvent<HTMLFormElement>){
+  event.preventDefault();setError("");setNotice("");
+  if(nextPassword!==repeatPassword){setError("Новые пароли не совпадают.");return;}
+  setBusy(true);
+  try{
+   await api("/api/account/password",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({currentPassword:oldPassword,newPassword:nextPassword})});
+   setOldPassword("");setNextPassword("");setRepeatPassword("");
+   setCustomer(null);setAddresses([]);setOrders([]);setTab("login");
+   setNotice("Пароль обновлён. Для безопасности войдите заново.");
+  }catch(e){setError(e instanceof Error?e.message:"Не удалось изменить пароль.");}
   finally{setBusy(false);}
  }
  async function logout(){
@@ -150,23 +178,31 @@ export default function AccountPortal(){
    <>
     <section className="buyer-profile buyer-panel"><div><h2>{customer.name}</h2><p>{customer.email}</p></div>
       <button type="button" disabled={busy} onClick={()=>void logout()}>Выйти</button></section>
-    <div className="buyer-layout">
-     <section className="buyer-panel"><div className="buyer-panel-head"><h2>Мои адреса</h2><span>{addresses.length}</span></div>
+    <nav className="buyer-tabs buyer-dashboard-tabs" aria-label="Разделы кабинета">
+     {([["orders","Мои заказы"],["addresses","Адреса"],["profile","Личные данные"],["security","Безопасность"]] as const).map(([key,label])=>
+      <button type="button" key={key} className={section===key?"selected":""}
+       onClick={()=>{setSection(key);setError("");setNotice("");}}>{label}</button>)}
+    </nav>
+    <div className="buyer-layout buyer-layout-single">
+     {section==="addresses"&&<section className="buyer-panel"><div className="buyer-panel-head"><h2>Мои адреса</h2><span>{addresses.length}</span></div>
       {addresses.length?addresses.map(a=><div className="buyer-address" key={a.id}>
        <div><strong>{a.recipient} · {a.phone}</strong>
         <p>{a.city}, {a.street}, д. {a.building}{a.apartment?", кв. "+a.apartment:""}</p></div>
-       <button type="button" disabled={busy} onClick={()=>void remove(a.id)}>Удалить</button></div>):
+       <div className="buyer-address-actions"><button type="button" disabled={busy} onClick={()=>{setAddress({...a});setEditAddressId(a.id);setAddressOpen(true);}}>Изменить</button>
+       <button type="button" disabled={busy} onClick={()=>void remove(a.id)}>Удалить</button></div></div>):
        <p className="buyer-muted">Сохранённых адресов пока нет.</p>}
-      <h3>Добавить адрес</h3>
+      {!addressOpen?<button type="button" className="buyer-primary" disabled={busy} onClick={()=>{setEditAddressId(null);setAddress({...EMPTY});setAddressOpen(true);}}>+ Добавить адрес</button>:<>
+      <h3>{editAddressId?"Изменить адрес":"Новый адрес"}</h3>
       <form className="buyer-form buyer-address-form" onSubmit={e=>void saveAddress(e)}>
        {([["recipient","ФИО получателя"],["phone","Телефон"],["city","Город"],["street","Улица"],["building","Дом"],["apartment","Квартира"],["comment","Комментарий"]] as const).map(([key,label])=>
         <label key={key}>{label}<input required={!["apartment","comment"].includes(key)}
          maxLength={key==="comment"?500:key==="street"?160:key==="recipient"||key==="city"?120:32}
          value={address[key]} onChange={e=>setAddress({...address,[key]:e.target.value})}/></label>)}
        <button className="buyer-primary" disabled={busy} type="submit">Сохранить адрес</button>
-      </form>
-     </section>
-     <section className="buyer-panel"><div className="buyer-panel-head"><h2>Мои заказы</h2>
+       <button type="button" disabled={busy} onClick={()=>{setEditAddressId(null);setAddressOpen(false);}}>Отмена</button>
+      </form></>}
+     </section>}
+     {section==="orders"&&<section className="buyer-panel"><div className="buyer-panel-head"><h2>Мои заказы</h2>
       <Link href="/checkout" className="buyer-link">Перейти к оформлению →</Link></div>
       {orders.length?orders.map(o=><article className="buyer-order" key={o.id}>
        <div className="buyer-order-head"><strong>Заказ № {o.id}</strong><span>{statuses[o.status]||o.status}</span></div>
@@ -190,7 +226,25 @@ export default function AccountPortal(){
        </div>
       </article>):
       <div className="buyer-muted"><p>Пока нет заказов.</p><Link href="/checkout" className="buyer-link">Оформить первый заказ →</Link></div>}
-     </section>
+     </section>}
+     {section==="profile"&&<section className="buyer-panel"><h2>Личные данные</h2>
+      <form className="buyer-form" onSubmit={e=>void saveProfile(e)}>
+       <label>Имя<input required minLength={2} maxLength={120} autoComplete="name"
+        value={profileName} onChange={e=>setProfileName(e.target.value)}/></label>
+       <label>Email<input value={customer.email} disabled readOnly/></label>
+       <p className="buyer-muted">Смена email будет доступна после подтверждения нового адреса.</p>
+       <button type="submit" className="buyer-primary" disabled={busy}>Сохранить</button>
+      </form>
+     </section>}
+     {section==="security"&&<section className="buyer-panel"><h2>Безопасность</h2>
+      <p className="buyer-muted">После смены пароля все устройства выйдут из аккаунта.</p>
+      <form className="buyer-form" onSubmit={e=>void changePassword(e)}>
+       <label>Текущий пароль<input type="password" required minLength={6} autoComplete="current-password" value={oldPassword} onChange={e=>setOldPassword(e.target.value)}/></label>
+       <label>Новый пароль<input type="password" required minLength={8} autoComplete="new-password" value={nextPassword} onChange={e=>setNextPassword(e.target.value)}/></label>
+       <label>Повтор нового пароля<input type="password" required minLength={8} autoComplete="new-password" value={repeatPassword} onChange={e=>setRepeatPassword(e.target.value)}/></label>
+       <button type="submit" className="buyer-primary" disabled={busy}>Сменить пароль</button>
+      </form>
+     </section>}
     </div>
    </>}
  </main>;
