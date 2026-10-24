@@ -24,12 +24,14 @@ export async function POST(req:NextRequest){
       GREATEST(0,CEIL(EXTRACT(EPOCH FROM (expires_at-NOW()))))::int AS codeseconds,
       GREATEST(0,CEIL(EXTRACT(EPOCH FROM (resend_after-NOW()))))::int AS resendseconds
      FROM shop_customer_signup_codes
-     WHERE email=$1 AND resume_token_hash=$2 AND registration_expires_at>NOW()`,
+     WHERE email=$1 AND resume_token_hash=$2 AND (registration_expires_at>NOW() OR expires_at>NOW())`,
     [email,resumeHash(token)]);
   const row=r.rows[0];
   if(!row)return NextResponse.json({pending:false},{headers:noStore});
   return NextResponse.json({
    pending:true,email,registrationExpiresInSeconds:row.registrationseconds,
+   verificationGraceSeconds:Math.max(row.registrationseconds,row.codeseconds),
+   canResend:row.registrationseconds>0,
    codeExpiresInSeconds:row.codeseconds,resendAfterSeconds:row.resendseconds
   },{headers:noStore});
  }catch(err){return publicError(err);}
