@@ -30,7 +30,7 @@ export async function GET(req:NextRequest){
   if(status!=="all"){params.push(status);where.push("o.status=$"+params.length);}
   const condition=where.length?" WHERE "+where.join(" AND "):"";
   const count=await getPool().query<{total:number}>(`SELECT COUNT(*)::int AS total
-    FROM shop_orders o JOIN shop_customers c ON c.id=o.customer_id${condition}`,params);
+    FROM shop_orders o LEFT JOIN shop_customers c ON c.id=o.customer_id${condition}`,params);
   const offset=(page-1)*limit;
   const result=await getPool().query(`SELECT o.id::text,o.status,o.payment_status AS "paymentStatus",
    o.total_minor::text AS "totalMinor",
@@ -41,12 +41,13 @@ export async function GET(req:NextRequest){
    o.carrier_code AS "carrierCode",o.tracking_number AS "trackingNumber",
    o.delivery_point AS "deliveryPoint",
    o.delivery_address AS address,o.buyer_note AS note,
-   o.created_at AS "createdAt",c.name AS "customerName",c.email AS "customerEmail",
+   o.created_at AS "createdAt",COALESCE(c.name,'Удалённый покупатель') AS "customerName",
+   COALESCE(c.email,'') AS "customerEmail",
    COALESCE(jsonb_agg(jsonb_build_object('id',i.product_id,'title',i.title,'quantity',i.quantity,
      'unitMinor',i.unit_price_minor::text,'lineMinor',i.line_total_minor::text,
      'variantId',i.variant_id,'selection',i.variant_selection)
      ORDER BY i.id) FILTER(WHERE i.id IS NOT NULL),'[]'::jsonb) AS items
-   FROM shop_orders o JOIN shop_customers c ON c.id=o.customer_id
+   FROM shop_orders o LEFT JOIN shop_customers c ON c.id=o.customer_id
    LEFT JOIN shop_order_items i ON i.order_id=o.id
    ${condition}
    GROUP BY o.id,c.id ORDER BY o.created_at DESC,o.id DESC LIMIT ${limit} OFFSET ${offset}`,params);
