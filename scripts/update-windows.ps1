@@ -130,8 +130,12 @@ try {
     }
   }
   $pkg = Get-Content -LiteralPath (Join-Path $source "package.json") -Raw | ConvertFrom-Json
-  $pkgLock = Get-Content -LiteralPath (Join-Path $source "package-lock.json") -Raw | ConvertFrom-Json
-  if ($pkg.name -ne "vira-shop" -or $pkgLock.name -ne "vira-shop") {
+  # Windows PowerShell 5.1 ConvertFrom-Json cannot handle some npm lockfile keys.
+  # Let Node.js validate the complete lockfile without altering it.
+  $lockFilePath = Join-Path $source "package-lock.json"
+  & node.exe -e "const p=require(process.argv[1]);if(p.name!=='vira-shop'||!p.packages)process.exit(1)" $lockFilePath
+  $lockOk = $LASTEXITCODE -eq 0
+  if ($pkg.name -ne "vira-shop" -or -not $lockOk) {
     throw "Update archive does not belong to Vira Shop."
   }
 
