@@ -25,30 +25,24 @@ for(let i=0;i<30;i++){
  await delay(500);
 }
 assert.ok(ready,"Verified signup test server did not start");
-// Cancelling signup must revoke its OTP without creating an account.
-// The bearer cancelToken is bound to the initiating browser; email alone is insufficient.
-const abandonEmail="abandon_"+randomUUID().slice(0,8)+"@example.test";
-const abandoned=await call("/api/account/register",{method:"POST",status:202,
- body:{name:"Отменяемая регистрация",email:abandonEmail,password:"Temp-password-123"}});
-assert.match(abandoned.data.cancelToken,/^[a-f0-9]{64}$/);
-const abandonedMail=JSON.parse(readFileSync(outbox,"utf8"));
-assert.equal(abandonedMail.to,abandonEmail);
-const wrongCancel=await call("/api/account/cancel-signup",{method:"POST",body:{
- email:abandonEmail,cancelToken:"0".repeat(64)
-}});
-assert.equal(wrongCancel.data.cancelled,false);
-const cancelled=await call("/api/account/cancel-signup",{method:"POST",body:{
- email:abandonEmail,cancelToken:abandoned.data.cancelToken
-}});
-assert.equal(cancelled.data.cancelled,true);
-await call("/api/account/verify",{method:"POST",status:410,
- body:{email:abandonEmail,code:abandonedMail.code}});
-await call("/api/account/session",{method:"POST",status:401,
- body:{email:abandonEmail,password:"Temp-password-123"}});
-// Cancellation may not be used to reset the per-email resend/cooldown limit.
-await call("/api/account/register",{method:"POST",status:429,
- body:{name:"Другой",email:abandonEmail,password:"Temp-password-123"}});
-
+// A pending signup can be resumed only with its browser-specific token.
+const resumeEmail="resume_"+randomUUID().slice(0,8)+"@example.test";
+const pending=await call("/api/account/register",{method:"POST",status:202,
+ body:{name:"Resume test",email:resumeEmail,password:"Fixture-12345678"}});
+assert.match(pending.data.resumeToken,/^[a-f0-9]{64}$/);
+assert.ok(pending.data.registrationExpiresInSeconds>1700);
+const token=pending.data.resumeToken;
+const unauthorized=await call("/api/account/pending",{method:"POST",body:{email:resumeEmail,resumeToken:"0".repeat(64)}});
+assert.equal(unauthorized.data.pending,false);
+const resumed=await call("/api/account/pending",{method:"POST",body:{email:resumeEmail,resumeToken:token}});
+assert.equal(resumed.data.pending,true);
+assert.ok(resumed.data.registrationExpiresInSeconds<=1800);
+assert.ok(resumed.data.codeExpiresInSeconds<=600);
+await call("/api/account/resend",{method:"POST",status:429,body:{email:resumeEmail,resumeToken:token}});
+const originalCode=JSON.parse(readFileSync(outbox,"utf8")).code;
+await call("/api/account/verify",{method:"POST",status:201,body:{email:resumeEmail,code:originalCode}});
+const after=await call("/api/account/pending",{method:"POST",body:{email:resumeEmail,resumeToken:token}});
+assert.equal(after.data.pending,false);
 const email="verify_"+randomUUID().slice(0,8)+"@example.test";
 const password="Test-email-pass-2026";
 const register=await call("/api/account/register",{method:"POST",status:202,
