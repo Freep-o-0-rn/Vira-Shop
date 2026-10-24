@@ -11,6 +11,7 @@ jobs:
           node-version: '24'
       - run: npm install --no-audit --no-fund
       - run: node --experimental-strip-types scripts/test-verification-code.mjs
+      - run: node scripts/test-signup-grace.mjs
       - run: node --experimental-strip-types scripts/test-demo-image-url.mjs
       - run: node --experimental-strip-types scripts/test-demo-image-cache.mjs
       - run: node --experimental-strip-types scripts/test-catalog-route.mjs
