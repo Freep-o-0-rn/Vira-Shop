@@ -25,5 +25,6 @@ assert.ok(!otp.includes("maxLength"),"Native text input must not truncate format
 assert.ok(otp.includes("Array.from({length:6}"),"OTP must render six visible cells");
 assert.ok(ui.includes('<OtpCodeInput id="account-signup-code"'),"Signup uses the new OTP control");
 assert.ok(ui.includes('<OtpCodeInput id="account-deletion-code"'),"Account deletion uses the new OTP control");
-assert.ok(ui.includes("Отменить регистрацию"),"Explicit registration cancellation available");
+assert.ok(!ui.includes("Отменить регистрацию"),"Signup cancellation control is not shown");
+assert.ok(ui.includes("PENDING_KEY"),"Signup resume state is persisted in the browser");
 console.log("Copied OTP formatting tests passed.");
