@@ -114,7 +114,9 @@ try {
 
   $unpack = Join-Path $temp "unpacked"
   $null = New-Item -ItemType Directory -Path $unpack
+  Write-Host "Extracting source archive ..."
   Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force
+  Write-Host "Archive extracted."
   $candidates = @(Get-ChildItem -LiteralPath $unpack -Directory | Where-Object {
     Test-Path -LiteralPath (Join-Path $_.FullName "package.json") -PathType Leaf
   })
@@ -133,6 +135,7 @@ try {
     throw "Update archive does not belong to Vira Shop."
   }
 
+  Write-Host "Validating source file list ..."
   $files = @(Get-SourceFiles $source)
   if ($files.Count -lt 80 -or $files.Count -gt 5000) { throw "Unexpected source file count: $($files.Count)" }
   $previousManifest = Join-Path $project ".vira-updater-files.txt"
@@ -215,6 +218,8 @@ try {
   Write-Host "Start the shop using START-WINDOWS.bat (it also starts Caddy)."
 } catch {
   Write-Host "UPDATER ERROR: $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host $_.InvocationInfo.PositionMessage
+  Write-Host $_.ScriptStackTrace
   if (-not $committed -and $backup -and (Test-Path -LiteralPath (Join-Path $backup "BACKUP-COMPLETE.txt"))) {
     Write-Host "Restoring changed source files from backup ..." -ForegroundColor Yellow
     $saved = Join-Path $backup "project"
