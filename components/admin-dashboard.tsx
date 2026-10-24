@@ -47,6 +47,9 @@ export default function AdminDashboard({login}:{login:string}) {
   const [existingProduct,setExistingProduct]=useState(false);
   const [editingCategory,setEditingCategory]=useState<FormCategory|null>(null);
   const [existingCategory,setExistingCategory]=useState(false);
+  const [deletingCategory,setDeletingCategory]=useState<Category|null>(null);
+  const [moveTarget,setMoveTarget]=useState("");
+  const [deleteError,setDeleteError]=useState("");
   const [emojiAuto,setEmojiAuto]=useState(true);
   const [emojiPickerOpen,setEmojiPickerOpen]=useState(false);
   const [filter,setFilter]=useState("");
@@ -161,11 +164,30 @@ export default function AdminDashboard({login}:{login:string}) {
       setEditingCategory(null);await refresh();notice(existingCategory?"Категория обновлена.":"Категория добавлена.");
     }catch(e){setError(e instanceof Error?e.message:"Ошибка.");}finally{setPending(false);}
   }
-  async function deleteCategory(c:Category){
-    if(!confirm("Удалить категорию «"+c.title+"»? Если в ней есть товары, удаление будет запрещено."))return;
-    setPending(true);setError("");setSuccess("");
-    try{await api("/api/admin/categories/"+encodeURIComponent(c.id),{method:"DELETE"});await refresh();notice("Категория удалена.");}
-    catch(e){setError(e instanceof Error?e.message:"Ошибка удаления.");}finally{setPending(false);}
+  const openDeleteCategory=(c:Category)=>{
+    setDeletingCategory(c);setMoveTarget("");setDeleteError("");setError("");setSuccess("");
+  };
+  async function deleteCategory(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    if(!deletingCategory||pending)return;
+    if(deletingCategory.productCount>0&&!moveTarget){
+      setDeleteError("Выберите категорию для переноса товаров.");return;
+    }
+    setPending(true);setDeleteError("");
+    try{
+      const target=deletingCategory.productCount>0?moveTarget:null;
+      const result=await api<{success:boolean;movedProducts:number}>(
+        "/api/admin/categories/"+encodeURIComponent(deletingCategory.id),{
+          method:"DELETE",
+          ...(target?{headers:{"Content-Type":"application/json"},body:JSON.stringify({moveToCategoryId:target})}:{})
+        });
+      setDeletingCategory(null);setCategoryFilter("all");
+      await refresh();
+      notice(result.movedProducts
+        ? "Категория удалена. Перенесено товаров: "+result.movedProducts+"."
+        : "Пустая категория удалена.");
+    }catch(e){setDeleteError(e instanceof Error?e.message:"Не удалось удалить категорию.");}
+    finally{setPending(false);}
   }
   async function logout(){
     try{await api("/api/admin/session",{method:"DELETE"});window.location.assign("/admin/login");}
@@ -297,7 +319,7 @@ export default function AdminDashboard({login}:{login:string}) {
             {visible.length===0&&<p className="admin-help">Товары не найдены.</p>}
           </div>
         </>}
-        {tab==="categories"&&<div className="admin-panel"><h2>Категории</h2><div className="admin-category-list">{categories.map(c=><div className="admin-category-item" key={c.id}><div className="admin-category-icon">{c.emoji||"📦"}</div><div><strong>{c.title}</strong><small>{c.id} · товаров: {c.productCount} · {c.active?"активна":"скрыта"}</small></div><div className="admin-actions"><button disabled={pending} onClick={()=>editCategory(c)}>Изменить</button><button disabled={pending||c.productCount>0} title={c.productCount?"Сначала перенесите товары":""} onClick={()=>void deleteCategory(c)}>Удалить</button></div></div>)}</div></div>}
+        {tab==="categories"&&<div className="admin-panel"><h2>Категории</h2><p className="admin-help">Все категории можно изменять. При удалении категории с товарами выберите, куда их перенести.</p><div className="admin-category-list">{categories.map(c=><div className="admin-category-item" key={c.id}><div className="admin-category-icon">{c.emoji||"📦"}</div><div><strong>{c.title}</strong><small>{c.id} · товаров: {c.productCount} · {c.active?"активна":"скрыта"}</small></div><div className="admin-actions"><button disabled={pending} onClick={()=>editCategory(c)}>Изменить</button><button disabled={pending} onClick={()=>openDeleteCategory(c)}>Удалить</button></div></div>)}</div></div>}
         {tab==="orders"&&<AdminOrdersPanel onChanged={refresh}/>}
       </>}
     </section>
@@ -353,10 +375,29 @@ export default function AdminDashboard({login}:{login:string}) {
         <div className="admin-form-bottom"><button type="button" disabled={pending||imageUploading} onClick={()=>setEditingProduct(null)}>Отмена</button><button type="submit" className="admin-primary" disabled={pending||imageUploading}>{imageUploading?"Загружаем фото…":pending?"Сохраняем…":"Сохранить товар"}</button></div>
       </form>
     </div></div>}
+    {deletingCategory&&<div className="admin-modal-overlay" onClick={()=>{if(!pending)setDeletingCategory(null)}}><div className="admin-modal admin-modal-small" role="dialog" aria-modal="true" aria-label="Удаление категории" onClick={e=>e.stopPropagation()}>
+      <div className="admin-modal-heading"><div><span className="admin-eyebrow">КАТЕГОРИИ</span><h2>Удалить категорию?</h2></div><button type="button" aria-label="Закрыть" disabled={pending} onClick={()=>setDeletingCategory(null)}>×</button></div>
+      <form onSubmit={e=>void deleteCategory(e)}>
+        <p className="admin-help">Категория <strong>«{deletingCategory.title}»</strong> будет удалена из магазина.</p>
+        {deletingCategory.productCount>0?<>
+          <p className="admin-delete-note">В категории {deletingCategory.productCount} товаров, включая скрытые. Они не будут удалены: все товары и их варианты переместятся в выбранную категорию. Заказы и артикулы сохранятся.</p>
+          <label className="admin-delete-target">Перенести товары в категорию
+            <select required value={moveTarget} disabled={pending} onChange={e=>{setMoveTarget(e.target.value);setDeleteError("");}}>
+              <option value="">Выберите категорию</option>
+              {categories.filter(c=>c.id!==deletingCategory.id).map(c=><option key={c.id} value={c.id}>{c.emoji} {c.title}{c.active?"":" (скрыта)"}</option>)}
+            </select>
+          </label>
+          {categories.length<2&&<p className="admin-delete-note">Сначала создайте другую категорию для переноса.</p>}
+          {moveTarget&&categories.find(c=>c.id===moveTarget)?.active===false&&<p className="admin-delete-note">Выбранная категория скрыта. Перенесённые товары не будут видны покупателям, пока её не откроете.</p>}
+        </>:<p className="admin-delete-note">В категории нет товаров, поэтому её можно удалить сразу.</p>}
+        {deleteError&&<p role="alert" className="admin-delete-error">{deleteError}</p>}
+        <div className="admin-form-bottom"><button type="button" disabled={pending} onClick={()=>setDeletingCategory(null)}>Отмена</button><button type="submit" className="admin-delete-confirm" disabled={pending||(deletingCategory.productCount>0&&!moveTarget)}>{pending?"Удаляем…":deletingCategory.productCount>0?"Перенести и удалить":"Удалить категорию"}</button></div>
+      </form>
+    </div></div>}
     {editingCategory&&<div className="admin-modal-overlay" onClick={()=>{if(!pending)setEditingCategory(null)}}><div className="admin-modal admin-modal-small" role="dialog" aria-modal="true" aria-label="Редактор категории" onClick={e=>e.stopPropagation()}>
       <div className="admin-modal-heading"><div><span className="admin-eyebrow">КАТЕГОРИИ</span><h2>{existingCategory?"Изменить категорию":"Новая категория"}</h2></div><button disabled={pending} aria-label="Закрыть" onClick={()=>setEditingCategory(null)}>×</button></div>
       <form onSubmit={e=>void saveCategory(e)}><div className="admin-form-grid">
-        <label className="full">Идентификатор<input required readOnly={existingCategory} value={editingCategory.id} placeholder="new_category" onChange={e=>setEditingCategory({...editingCategory,id:e.target.value})}/></label>
+        <label className="full">{existingCategory?"Служебный ID (не изменяется)":"Идентификатор"}<input required readOnly={existingCategory} value={editingCategory.id} placeholder="new_category" onChange={e=>setEditingCategory({...editingCategory,id:e.target.value})}/></label>
         <label className="full">Название<input required maxLength={120} value={editingCategory.title}
           placeholder="Например: Электроника" onChange={e=>{
             const title=e.target.value;
