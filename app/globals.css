@@ -579,3 +579,9 @@
 .buyer-otp-tip{margin:0;color:#7b8ba5;font-size:12px;line-height:1.5}
 .buyer-otp-cancel{color:#71819d!important}
 @media(max-width:380px){.buyer-otp-digits{padding:6px;gap:5px}.buyer-otp-digit{height:44px;font-size:23px}}
+
+/* Email OTP countdown: seconds are updated from absolute expiry, not ticks. */
+.buyer-otp-timer{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.buyer-otp-timer strong{font-variant-numeric:tabular-nums;letter-spacing:.6px;font-size:16px;color:#2864ff}
+.buyer-otp-warning strong{color:#b46b16}
+.buyer-otp-expired{color:#b42335}
