@@ -25,6 +25,24 @@ for(let i=0;i<30;i++){
  await delay(500);
 }
 assert.ok(ready,"Verified signup test server did not start");
+// A pending signup can be resumed only with its browser-specific token.
+const resumeEmail="resume_"+randomUUID().slice(0,8)+"@example.test";
+const pending=await call("/api/account/register",{method:"POST",status:202,
+ body:{name:"Resume test",email:resumeEmail,password:"Fixture-12345678"}});
+assert.match(pending.data.resumeToken,/^[a-f0-9]{64}$/);
+assert.ok(pending.data.registrationExpiresInSeconds>1700);
+const token=pending.data.resumeToken;
+const unauthorized=await call("/api/account/pending",{method:"POST",body:{email:resumeEmail,resumeToken:"0".repeat(64)}});
+assert.equal(unauthorized.data.pending,false);
+const resumed=await call("/api/account/pending",{method:"POST",body:{email:resumeEmail,resumeToken:token}});
+assert.equal(resumed.data.pending,true);
+assert.ok(resumed.data.registrationExpiresInSeconds<=1800);
+assert.ok(resumed.data.codeExpiresInSeconds<=600);
+await call("/api/account/resend",{method:"POST",status:429,body:{email:resumeEmail,resumeToken:token}});
+const originalCode=JSON.parse(readFileSync(outbox,"utf8")).code;
+await call("/api/account/verify",{method:"POST",status:201,body:{email:resumeEmail,code:originalCode}});
+const after=await call("/api/account/pending",{method:"POST",body:{email:resumeEmail,resumeToken:token}});
+assert.equal(after.data.pending,false);
 const email="verify_"+randomUUID().slice(0,8)+"@example.test";
 const password="Test-email-pass-2026";
 const register=await call("/api/account/register",{method:"POST",status:202,
@@ -40,7 +58,7 @@ await call("/api/account/verify",{method:"POST",status:400,body:{email,code:code
 const verified=await call("/api/account/verify",{method:"POST",status:201,body:{email,code}});
 assert.ok(verified.cookie?.includes("vira_customer_session="));
 assert.equal((await call("/api/account/session",{cookie:verified.cookie})).data.customer.email,email);
-await call("/api/account/verify",{method:"POST",status:400,body:{email,code}});
+await call("/api/account/verify",{method:"POST",status:410,body:{email,code}});
 await call("/api/account/register",{method:"POST",status:409,body:{email,name:"Other",password}});
 const rename=await call("/api/account/profile",{method:"PATCH",cookie:verified.cookie,
  body:{name:"Новое имя"}});

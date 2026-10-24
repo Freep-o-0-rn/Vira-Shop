@@ -1,5 +1,6 @@
 import {NextRequest,NextResponse} from "next/server";
 import {getPool} from "@/lib/server/db";
+import {ensurePendingSignupCleanup,pruneExpiredSignups} from "@/lib/server/pending-signup";
 import {bad,createCustomerSession,denyCrossOrigin,emailValid,jsonBody,noStore,object,publicError,
  setCustomerCookie,verifyPassword} from "@/lib/server/customer-auth";
 import {verificationEnabled} from "@/lib/server/customer-mail";
@@ -16,6 +17,8 @@ export async function POST(req:NextRequest){
  const code=typeof body?.code==="string"?body.code.trim():"";
  if(!emailValid(email)||!/^[0-9]{6}$/.test(code))return bad("Введите шестизначный код из письма.");
 
+ ensurePendingSignupCleanup();
+ try{await pruneExpiredSignups();}catch(err){return publicError(err);}
  const client=await getPool().connect();
  let id:string;
  let name:string;
@@ -23,9 +26,9 @@ export async function POST(req:NextRequest){
   await client.query("BEGIN");
   const pending=await client.query<{name:string;password_hash:string;code_hash:string;expired:boolean;failed_attempts:number}>(
    `SELECT name,password_hash,code_hash,expires_at<NOW() AS expired,failed_attempts
-     FROM shop_customer_signup_codes WHERE email=$1 FOR UPDATE`,[email]);
+     FROM shop_customer_signup_codes WHERE email=$1 AND expires_at>NOW() FOR UPDATE`,[email]);
   const row=pending.rows[0];
-  if(!row){await client.query("ROLLBACK");return bad("Код не найден. Запросите новое письмо.",400);}
+  if(!row){await client.query("ROLLBACK");return bad("Код подтверждения истёк или регистрация не найдена. Запросите новый код, если 30 минут ещё не прошли.",410);}
   if(row.expired){await client.query("ROLLBACK");return bad("Срок действия кода истёк. Запросите новый.",410);}
   if(row.failed_attempts>=5){await client.query("ROLLBACK");return bad("Слишком много попыток. Запросите новый код.",429);}
   if(!(await verifyPassword(code,row.code_hash))){

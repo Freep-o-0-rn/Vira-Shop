@@ -1,4 +1,5 @@
-import {randomInt} from "node:crypto";
+import {randomBytes,randomInt} from "node:crypto";
+import {ensurePendingSignupCleanup,pruneExpiredSignups,resumeHash} from "@/lib/server/pending-signup";
 import {sendVerificationEmail,verificationEnabled,verificationReady} from "@/lib/server/customer-mail";
 import {NextRequest,NextResponse} from "next/server";
 import {getPool} from "@/lib/server/db";
@@ -18,8 +19,14 @@ export async function POST(req:NextRequest){
   if(!verificationReady())return bad("Подтверждение почты ещё не настроено. Попробуйте позже.",503);
   if((b.password as string).length<8)return bad("Пароль должен содержать не менее 8 символов.");
   const code=randomInt(0,1000000).toString().padStart(6,"0");
+  const resumeToken=randomBytes(32).toString("hex");
+  const resumeTokenHash=resumeHash(resumeToken);
   const hashedPassword=await hashPassword(b.password as string);
   const hashedCode=await hashPassword(code);
+  ensurePendingSignupCleanup();
+  await pruneExpiredSignups();
+  let registrationSeconds=1800;
+  let codeSeconds=600;
   const client=await getPool().connect();
   try{
    await client.query("BEGIN");
@@ -27,27 +34,40 @@ export async function POST(req:NextRequest){
    if(registered.rowCount){
     await client.query("ROLLBACK");return bad("Этот email уже зарегистрирован.",409);
    }
-   const previous=await client.query<{cooldown:boolean;hourly:number;elapsed:boolean}>(
+   const previous=await client.query<{cooldown:boolean;hourly:number;elapsed:boolean;registration_open:boolean}>(
     `SELECT resend_after>NOW() AS cooldown,sent_in_window AS hourly,
-      window_started_at<NOW()-INTERVAL '1 hour' AS elapsed
+      window_started_at<NOW()-INTERVAL '1 hour' AS elapsed,
+      registration_expires_at>NOW() AS registration_open
       FROM shop_customer_signup_codes WHERE email=$1 FOR UPDATE`,[email]);
+   if(previous.rowCount && !previous.rows[0].registration_open){
+    await client.query("ROLLBACK");
+    return bad("30 минут на запрос кодов истекли. Если последний код ещё действует, введите его.",410);
+   }
    if(previous.rowCount && previous.rows[0].cooldown){
     await client.query("ROLLBACK");return bad("Повторный код можно запросить через 60 секунд.",429);
    }
    if(previous.rowCount && !previous.rows[0].elapsed && previous.rows[0].hourly>=5){
     await client.query("ROLLBACK");return bad("Слишком много запросов. Попробуйте через час.",429);
    }
-   await client.query(`INSERT INTO shop_customer_signup_codes
-    (email,name,password_hash,code_hash,expires_at,resend_after,window_started_at,sent_in_window,failed_attempts)
-    VALUES($1,$2,$3,$4,NOW()+INTERVAL '10 minutes',NOW()+INTERVAL '60 seconds',NOW(),1,0)
+   const inserted=await client.query<{registration_seconds:number;code_seconds:number}>(`INSERT INTO shop_customer_signup_codes
+    (email,name,password_hash,code_hash,expires_at,resend_after,window_started_at,sent_in_window,failed_attempts,resume_token_hash,registration_expires_at)
+    VALUES($1,$2,$3,$4,NOW()+INTERVAL '10 minutes',NOW()+INTERVAL '60 seconds',NOW(),1,0,$5,NOW()+INTERVAL '30 minutes')
     ON CONFLICT(email) DO UPDATE SET
      name=EXCLUDED.name,password_hash=EXCLUDED.password_hash,code_hash=EXCLUDED.code_hash,
-     expires_at=EXCLUDED.expires_at,resend_after=EXCLUDED.resend_after,failed_attempts=0,
+     resume_token_hash=EXCLUDED.resume_token_hash,
+     registration_expires_at=shop_customer_signup_codes.registration_expires_at,
+     expires_at=EXCLUDED.expires_at,
+     resend_after=EXCLUDED.resend_after,failed_attempts=0,
      sent_in_window=CASE WHEN shop_customer_signup_codes.window_started_at<NOW()-INTERVAL '1 hour'
       THEN 1 ELSE shop_customer_signup_codes.sent_in_window+1 END,
      window_started_at=CASE WHEN shop_customer_signup_codes.window_started_at<NOW()-INTERVAL '1 hour'
-      THEN NOW() ELSE shop_customer_signup_codes.window_started_at END`,
-    [email,name,hashedPassword,hashedCode]);
+      THEN NOW() ELSE shop_customer_signup_codes.window_started_at END
+    RETURNING
+      GREATEST(0,CEIL(EXTRACT(EPOCH FROM (registration_expires_at-NOW()))))::int AS registration_seconds,
+      GREATEST(0,CEIL(EXTRACT(EPOCH FROM (expires_at-NOW()))))::int AS code_seconds`,
+    [email,name,hashedPassword,hashedCode,resumeTokenHash]);
+   registrationSeconds=inserted.rows[0].registration_seconds;
+   codeSeconds=inserted.rows[0].code_seconds;
    await client.query("COMMIT");
   }catch(err){
    try{await client.query("ROLLBACK");}catch{}
@@ -61,7 +81,7 @@ export async function POST(req:NextRequest){
     [email,hashedCode]).catch(()=>{});
    return bad("Не удалось отправить код. Проверьте адрес и повторите попытку.",503);
   }
-  return NextResponse.json({verificationRequired:true,email,expiresInSeconds:600},
+  return NextResponse.json({verificationRequired:true,email,resumeToken,expiresInSeconds:codeSeconds,registrationExpiresInSeconds:registrationSeconds},
    {status:202,headers:noStore});
  }
  try{

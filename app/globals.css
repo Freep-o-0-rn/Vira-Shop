@@ -565,3 +565,17 @@
 .buyer-danger-button:disabled{opacity:.55;cursor:not-allowed}
 .buyer-delete-confirm{flex-direction:row!important;align-items:flex-start!important;line-height:1.5;font-weight:500!important}
 .buyer-delete-confirm input{width:17px!important;height:17px;min-width:17px!important;margin:2px 4px 0 0}
+
+/* OTP: six visual cells backed by one native text input for mobile autofill. */
+.buyer-otp-wrapper{position:relative;width:100%;max-width:380px;min-width:0;cursor:text}
+.buyer-otp-native-input{position:absolute;inset:0;width:100%;height:100%;z-index:2;opacity:0;cursor:text;font-size:18px}
+.buyer-otp-digits{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;padding:9px;border:1px solid #ccd7eb;border-radius:14px;background:#fff;box-shadow:0 2px 5px rgba(17,41,92,.03);transition:border-color .15s,box-shadow .15s}
+.buyer-otp-wrapper:focus-within .buyer-otp-digits{border-color:#2864ff;box-shadow:0 0 0 3px rgba(40,100,255,.14)}
+.buyer-otp-digit{height:48px;min-width:0;border-radius:9px;background:#f3f6fd;display:flex;align-items:center;justify-content:center;color:#172e59;font-weight:750;font-size:26px;font-variant-numeric:tabular-nums}
+.buyer-otp-filled{background:#eaf0ff;color:#245fff}
+.buyer-otp-underscore{width:14px;height:2px;border-radius:2px;background:#aebdd5}
+.buyer-otp-wrapper:focus-within .buyer-otp-active{background:#eaf0ff;box-shadow:inset 0 -2px 0 #2864ff}
+.buyer-otp-wrapper:has(.buyer-otp-native-input:disabled){opacity:.55;cursor:default}
+.buyer-otp-tip{margin:0;color:#7b8ba5;font-size:12px;line-height:1.5}
+.buyer-otp-cancel{color:#71819d!important}
+@media(max-width:380px){.buyer-otp-digits{padding:6px;gap:5px}.buyer-otp-digit{height:44px;font-size:23px}}
