@@ -131,7 +131,7 @@ export async function sendVerificationEmail(recipient:string,code:string,purpose
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-radius:14px;background:#eff4ff;border:1px solid #d4e1ff">
 <tr><td style="text-align:center;padding:26px 12px">
 <p style="color:#687da5;font-size:11px;font-weight:bold;letter-spacing:1.3px;margin:0 0 13px">ВАШ КОД ПОДТВЕРЖДЕНИЯ</p>
-<p style="font-size:36px;line-height:1.2;letter-spacing:5px;font-weight:bold;color:#2864ff;margin:0;font-variant-numeric:tabular-nums">${code.slice(0,3)} ${code.slice(3)}</p>
+<p style="font-size:36px;line-height:1.2;letter-spacing:5px;font-weight:bold;color:#2864ff;margin:0;font-variant-numeric:tabular-nums">${code}</p>
 <p style="font-size:12px;color:#677b9a;margin:13px 0 0">Действует 10 минут</p>
 </td></tr></table>
 <p style="font-size:13px;line-height:1.6;color:#4c5f7c;margin:24px 0 8px"><strong>Не сообщайте этот код никому.</strong> Сотрудники Vira Shop никогда не запрашивают его.</p>
