@@ -1,7 +1,8 @@
 "use client";
 import {normalizeVerificationCode} from "@/lib/verification-code";
+import {formatOtpCountdown,secondsUntil} from "@/lib/otp-countdown";
 import OtpCodeInput from "@/components/otp-code-input";
-import {useEffect,useState,type FormEvent} from "react";
+import {useEffect,useRef,useState,type FormEvent} from "react";
 import Link from "next/link";
 import {DELIVERY_LABELS,LOGISTICS_LABELS,type DeliveryMethod,type LogisticsStatus} from "@/lib/logistics";
 type Customer={id:string;name:string;email:string};
@@ -34,6 +35,8 @@ export default function AccountPortal(){
  const [signupResumeToken,setSignupResumeToken]=useState("");
  const [signupExpiresAt,setSignupExpiresAt]=useState(0),[codeExpiresAt,setCodeExpiresAt]=useState(0);
  const [clock,setClock]=useState(0);
+ const verifyingCode=useRef(false);
+ const codeRemaining=secondsUntil(codeExpiresAt,clock||Date.now());
  const [addresses,setAddresses]=useState<Address[]>([]),[orders,setOrders]=useState<Order[]>([]);
  const [section,setSection]=useState<"orders"|"addresses"|"profile"|"security">("orders");
  const [addressOpen,setAddressOpen]=useState(false),[editAddressId,setEditAddressId]=useState<string|null>(null);
@@ -71,6 +74,7 @@ export default function AccountPortal(){
        setVerificationCode("");
        setSignupExpiresAt(Date.now()+(result.registrationExpiresInSeconds||0)*1000);
        setCodeExpiresAt(Date.now()+(result.codeExpiresInSeconds||0)*1000);
+       setClock(Date.now());
       }else localStorage.removeItem(PENDING_KEY);
      }
     }catch{localStorage.removeItem(PENDING_KEY);}
@@ -108,6 +112,7 @@ export default function AccountPortal(){
      setSignupResumeToken(result.resumeToken||"");
      setSignupExpiresAt(Date.now()+(result.registrationExpiresInSeconds||1800)*1000);
      setCodeExpiresAt(Date.now()+(result.expiresInSeconds||600)*1000);
+     setClock(Date.now());
      if(result.resumeToken)localStorage.setItem(PENDING_KEY,JSON.stringify({
       email:pendingEmail,resumeToken:result.resumeToken
      } satisfies PendingSignup));
@@ -123,17 +128,38 @@ export default function AccountPortal(){
   }catch(e){setError(e instanceof Error?e.message:"Ошибка входа.");}
   finally{setBusy(false);}
  }
- async function verifyEmail(event:FormEvent<HTMLFormElement>){
-  event.preventDefault();setBusy(true);setError("");setNotice("");
+ async function confirmEmailCode(code:string){
+  // A paste, autocomplete and the manual button can fire in quick succession.
+  // A synchronous ref prevents duplicate requests before React updates busy.
+  if(verifyingCode.current||code.length!==6||secondsUntil(codeExpiresAt,Date.now())===0)return;
+  verifyingCode.current=true;
+  setBusy(true);setError("");setNotice("");
   try{
    await api("/api/account/verify",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({email:verificationEmail,code:verificationCode})});
+    body:JSON.stringify({email:verificationEmail,code})});
    localStorage.removeItem(PENDING_KEY);
    setVerificationEmail("");setVerificationCode("");setSignupResumeToken("");
-   setSignupExpiresAt(0);setCodeExpiresAt(0);await refresh();
+   setSignupExpiresAt(0);setCodeExpiresAt(0);
+   await refresh();
    setNotice("Почта подтверждена, аккаунт создан.");
-  }catch(e){setError(e instanceof Error?e.message:"Ошибка подтверждения.");}
-  finally{setBusy(false);}
+  }catch(e){
+   // Allow the next code immediately after a failed attempt, including
+   // retyping or pasting another complete six-digit code.
+   setVerificationCode("");
+   setError(e instanceof Error?e.message:"Ошибка подтверждения.");
+  }finally{
+   verifyingCode.current=false;
+   setBusy(false);
+  }
+ }
+ function changeVerificationCode(value:string){
+  const code=normalizeVerificationCode(value);
+  setVerificationCode(code);
+  if(code.length===6)void confirmEmailCode(code);
+ }
+ function verifyEmail(event:FormEvent<HTMLFormElement>){
+  event.preventDefault();
+  void confirmEmailCode(verificationCode);
  }
  async function resendCode(){
   setBusy(true);setError("");setNotice("");
@@ -144,6 +170,7 @@ export default function AccountPortal(){
    setVerificationCode("");
    setCodeExpiresAt(Date.now()+result.expiresInSeconds*1000);
    setSignupExpiresAt(Date.now()+result.registrationExpiresInSeconds*1000);
+   setClock(Date.now());
    setNotice("Новый код отправлен. Проверьте почту и папку «Спам».");
   }catch(e){setError(e instanceof Error?e.message:"Не удалось отправить письмо.");}
   finally{setBusy(false);}
@@ -237,16 +264,17 @@ export default function AccountPortal(){
     <h2>Подтвердите почту</h2>
     <p className="buyer-muted">Мы отправили код на <strong>{verificationEmail}</strong>.
      Новый код можно запросить в течение 30 минут с начала регистрации. Последний код действует полные 10 минут, даже если 30 минут уже прошли.</p>
-    <p className="buyer-otp-timer">{codeExpiresAt>clock
-     ?"Код действует ещё "+Math.max(0,Math.ceil((codeExpiresAt-Date.now())/60000))+" мин."
-     :"Код истёк. Запросите новый."}</p>
+    <p className={"buyer-otp-timer"+(codeRemaining===0?" buyer-otp-expired":codeRemaining<=60?" buyer-otp-warning":"")}>
+     {codeRemaining>0?<>Код действителен ещё <strong role="timer" aria-live="off">{formatOtpCountdown(codeExpiresAt,clock||Date.now())}</strong></>:
+      <span role="status">Срок действия кода истёк. Запросите новый.</span>}
+    </p>
     <form className="buyer-form" onSubmit={e=>void verifyEmail(e)}>
      <label htmlFor="account-signup-code">Шестизначный код</label>
-     <OtpCodeInput id="account-signup-code" value={verificationCode} onChange={setVerificationCode}
-      disabled={busy} autoFocus/>
+     <OtpCodeInput id="account-signup-code" value={verificationCode} onChange={changeVerificationCode}
+      disabled={busy||codeRemaining===0} autoFocus/>
      <p className="buyer-otp-tip" id="account-signup-code-hint">Можно вставить код целиком из письма или использовать подсказку телефона.</p>
-     <button type="submit" className="buyer-primary" disabled={busy||verificationCode.length!==6}>
-      {busy?"Проверяем…":"Подтвердить email"}</button>
+     <button type="submit" className="buyer-primary" disabled={busy||codeRemaining===0||verificationCode.length!==6}>
+      {busy?"Проверяем код…":"Подтвердить email"}</button>
     </form>
     <p className="buyer-spam-hint"><span aria-hidden="true">✉️</span> Не нашли письмо? Проверьте папки <strong>«Спам»</strong> и <strong>«Рассылки»</strong>. Доставка может занять несколько минут.</p>
     <div className="buyer-auth-actions">
