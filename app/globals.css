@@ -574,7 +574,7 @@
 .buyer-otp-digit{height:48px;min-width:0;border-radius:9px;background:#f3f6fd;display:flex;align-items:center;justify-content:center;color:#172e59;font-weight:750;font-size:26px;font-variant-numeric:tabular-nums}
 .buyer-otp-filled{background:#eaf0ff;color:#245fff}
 .buyer-otp-underscore{width:14px;height:2px;border-radius:2px;background:#aebdd5}
-.buyer-otp-wrapper:focus-within .buyer-otp-digit:not(.buyer-otp-filled):first-of-type{background:#eaf0ff}
+.buyer-otp-wrapper:focus-within .buyer-otp-active{background:#eaf0ff;box-shadow:inset 0 -2px 0 #2864ff}
 .buyer-otp-wrapper:has(.buyer-otp-native-input:disabled){opacity:.55;cursor:default}
 .buyer-otp-tip{margin:0;color:#7b8ba5;font-size:12px;line-height:1.5}
 .buyer-otp-cancel{color:#71819d!important}
