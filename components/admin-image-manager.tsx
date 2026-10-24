@@ -57,22 +57,43 @@ export default function AdminImageManager({images,onChange,onBusyChange,disabled
     }
   }
 
-  function addUrl(){
+  async function addUrl(){
     if(busy)return;
     const value=url.trim();
     if(!value)return;
     if(images.length>=MAX_IMAGES){setError("Достигнут лимит 8 фотографий.");return;}
+    setError("");
     try{
-      if(!value.startsWith("/uploads/")){
-        const parsed=new URL(value);
-        if(parsed.protocol!=="https:"||parsed.username||parsed.password||value.length>1500)
-          throw new Error("Введите HTTPS-ссылку на изображение.");
-      }else if(!/^\/uploads\/[a-f0-9-]{36}\.(png|jpe?g|webp)$/.test(value)){
-        throw new Error("Некорректная локальная ссылка.");
+      if(value.startsWith("/uploads/")){
+        if(!/^\/uploads\/[a-f0-9-]{36}\.(png|jpe?g|webp)$/.test(value))
+          throw new Error("Некорректная локальная ссылка.");
+        if(images.includes(value))throw new Error("Это изображение уже добавлено.");
+        onChange([...images,value]);setUrl("");return;
       }
-      if(images.includes(value)){setError("Это изображение уже добавлено.");return;}
-      onChange([...images,value]);setUrl("");setError("");
-    }catch(err){setError(err instanceof Error?err.message:"Некорректная ссылка.");}
+      const parsed=new URL(value);
+      if(parsed.protocol!=="https:"||parsed.username||parsed.password||value.length>1500)
+        throw new Error("Введите HTTPS-ссылку на изображение.");
+      setUploading(true);onBusyChange(true);
+      setProgress("Сохраняем изображение с сайта-источника...");
+      const response=await fetch("/api/admin/import-image",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({url:value}),cache:"no-store"
+      });
+      let data:{url?:string;error?:string}={};
+      try{data=await response.json() as {url?:string;error?:string};}catch{}
+      if(response.status===401){
+        window.location.assign("/admin/login");
+        throw new Error("Сессия администратора завершилась.");
+      }
+      if(!response.ok||typeof data.url!=="string")
+        throw new Error(data.error||"Не удалось скачать изображение.");
+      if(images.includes(data.url))throw new Error("Изображение уже добавлено.");
+      onChange([...images,data.url]);setUrl("");
+      setProgress("Фотография сохранена на сервере. Нажмите «Сохранить товар».");
+    }catch(err){
+      setError(err instanceof Error?err.message:"Не удалось добавить изображение.");
+      setProgress("");
+    }finally{setUploading(false);onBusyChange(false);}
   }
 
   function move(from:number,to:number){
