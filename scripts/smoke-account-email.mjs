@@ -58,7 +58,7 @@ await call("/api/account/verify",{method:"POST",status:400,body:{email,code:code
 const verified=await call("/api/account/verify",{method:"POST",status:201,body:{email,code}});
 assert.ok(verified.cookie?.includes("vira_customer_session="));
 assert.equal((await call("/api/account/session",{cookie:verified.cookie})).data.customer.email,email);
-await call("/api/account/verify",{method:"POST",status:400,body:{email,code}});
+await call("/api/account/verify",{method:"POST",status:410,body:{email,code}});
 await call("/api/account/register",{method:"POST",status:409,body:{email,name:"Other",password}});
 const rename=await call("/api/account/profile",{method:"PATCH",cookie:verified.cookie,
  body:{name:"Новое имя"}});
