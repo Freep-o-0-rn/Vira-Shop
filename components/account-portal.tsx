@@ -1,5 +1,6 @@
 "use client";
 import {normalizeVerificationCode} from "@/lib/verification-code";
+import OtpCodeInput from "@/components/otp-code-input";
 import {useEffect,useState,type FormEvent} from "react";
 import Link from "next/link";
 import {DELIVERY_LABELS,LOGISTICS_LABELS,type DeliveryMethod,type LogisticsStatus} from "@/lib/logistics";
@@ -28,6 +29,7 @@ export default function AccountPortal(){
  const [confirmPassword,setConfirmPassword]=useState("");
  const [verificationOn,setVerificationOn]=useState(false);
  const [verificationEmail,setVerificationEmail]=useState(""),[verificationCode,setVerificationCode]=useState("");
+ const [signupCancelToken,setSignupCancelToken]=useState("");
  const [addresses,setAddresses]=useState<Address[]>([]),[orders,setOrders]=useState<Order[]>([]);
  const [section,setSection]=useState<"orders"|"addresses"|"profile"|"security">("orders");
  const [addressOpen,setAddressOpen]=useState(false),[editAddressId,setEditAddressId]=useState<string|null>(null);
@@ -58,11 +60,13 @@ export default function AccountPortal(){
   try{
    if(tab==="register"){
     if(password!==confirmPassword)throw Error("Пароли не совпадают.");
-    const result=await api<{verificationRequired?:boolean;email?:string}>("/api/account/register",{
+    const result=await api<{verificationRequired?:boolean;email?:string;cancelToken?:string}>("/api/account/register",{
      method:"POST",headers:{"Content-Type":"application/json"},
      body:JSON.stringify({name,email,password})});
     if(result.verificationRequired){
      setVerificationEmail(result.email||email.trim().toLowerCase());
+     setSignupCancelToken(result.cancelToken||"");
+     setVerificationCode("");
      setPassword("");setConfirmPassword("");
      setNotice("Код отправлен на электронную почту и действует 10 минут.");
      return;
@@ -79,7 +83,7 @@ export default function AccountPortal(){
   try{
    await api("/api/account/verify",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({email:verificationEmail,code:verificationCode})});
-   setVerificationEmail("");setVerificationCode("");await refresh();
+   setVerificationEmail("");setVerificationCode("");setSignupCancelToken("");await refresh();
    setNotice("Почта подтверждена, аккаунт создан.");
   }catch(e){setError(e instanceof Error?e.message:"Ошибка подтверждения.");}
   finally{setBusy(false);}
@@ -91,6 +95,24 @@ export default function AccountPortal(){
     body:JSON.stringify({email:verificationEmail})});
    setNotice("Новое письмо отправлено. Код действует 10 минут.");
   }catch(e){setError(e instanceof Error?e.message:"Не удалось отправить письмо.");}
+  finally{setBusy(false);}
+ }
+ async function cancelSignup(changeEmail:boolean){
+  setBusy(true);setError("");setNotice("");
+  try{
+   if(signupCancelToken){
+    await api("/api/account/cancel-signup",{method:"POST",headers:{"Content-Type":"application/json"},
+     body:JSON.stringify({email:verificationEmail,cancelToken:signupCancelToken})});
+   }
+   setVerificationEmail("");setVerificationCode("");setSignupCancelToken("");
+   setTab(changeEmail?"register":"login");
+   if(changeEmail){
+    setNotice("Введите другой email. Предыдущий код аннулирован.");
+   }else{
+    setEmail("");setName("");setPassword("");setConfirmPassword("");
+    setNotice("Регистрация отменена. Аккаунт не создан.");
+   }
+  }catch(e){setError(e instanceof Error?e.message:"Не удалось отменить регистрацию.");}
   finally{setBusy(false);}
  }
  async function saveAddress(event:FormEvent<HTMLFormElement>){
@@ -174,16 +196,18 @@ export default function AccountPortal(){
     <h2>Подтвердите почту</h2>
     <p className="buyer-muted">Введите код из письма на <strong>{verificationEmail}</strong>. Он действителен 10 минут.</p>
     <form className="buyer-form" onSubmit={e=>void verifyEmail(e)}>
-     <label>Шестизначный код<input required autoComplete="one-time-code" inputMode="numeric"
-      pattern="[0-9]{6}" placeholder="000000"
-      value={verificationCode} onChange={e=>setVerificationCode(normalizeVerificationCode(e.target.value))}/></label>
+     <label htmlFor="account-signup-code">Шестизначный код</label>
+     <OtpCodeInput id="account-signup-code" value={verificationCode} onChange={setVerificationCode}
+      disabled={busy} autoFocus/>
+     <p className="buyer-otp-tip" id="account-signup-code-hint">Можно вставить код целиком из письма или использовать подсказку телефона.</p>
      <button type="submit" className="buyer-primary" disabled={busy||verificationCode.length!==6}>
       {busy?"Проверяем…":"Подтвердить email"}</button>
     </form>
     <p className="buyer-spam-hint"><span aria-hidden="true">✉️</span> Не нашли письмо? Проверьте папки <strong>«Спам»</strong> и <strong>«Рассылки»</strong>. Доставка может занять несколько минут.</p>
     <div className="buyer-auth-actions">
      <button type="button" disabled={busy} onClick={()=>void resendCode()}>Отправить код повторно</button>
-     <button type="button" disabled={busy} onClick={()=>{setVerificationEmail("");setVerificationCode("");setError("");setNotice("");}}>Изменить email</button>
+     <button type="button" disabled={busy} onClick={()=>void cancelSignup(true)}>Изменить email</button>
+     <button type="button" disabled={busy} className="buyer-otp-cancel" onClick={()=>void cancelSignup(false)}>Отменить регистрацию</button>
     </div>
    </section>:
    <section className="buyer-auth buyer-panel">
@@ -283,9 +307,9 @@ export default function AccountPortal(){
         <form className="buyer-form" onSubmit={e=>void confirmAccountDeletion(e)}>
          <p className="buyer-muted">Мы отправили код подтверждения на <strong>{customer.email}</strong>.
           Он действителен 10 минут. Проверьте также папку «Спам».</p>
-         <label>Код из письма<input type="text" inputMode="numeric" autoComplete="one-time-code"
-          required pattern="[0-9]{6}" placeholder="000000"
-          value={deletionCode} onChange={e=>setDeletionCode(normalizeVerificationCode(e.target.value))}/></label>
+         <label htmlFor="account-deletion-code">Код из письма</label>
+         <OtpCodeInput id="account-deletion-code" value={deletionCode} onChange={setDeletionCode} disabled={busy}/>
+         <p className="buyer-otp-tip" id="account-deletion-code-hint">Шесть цифр можно вставить одним действием.</p>
          <label className="buyer-delete-confirm">
           <input type="checkbox" checked={deletionAgreed} onChange={e=>setDeletionAgreed(e.target.checked)}/>
           Я понимаю, что восстановить аккаунт после удаления нельзя.
