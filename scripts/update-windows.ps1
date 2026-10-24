@@ -18,6 +18,7 @@ $backup = $null
 $installed = New-Object System.Collections.Generic.List[string]
 $removed = New-Object System.Collections.Generic.List[string]
 $committed = $false
+$dependencyTouched = $false
 
 function Protected-Path([string]$relative) {
   $p = $relative.Replace('\','/')
@@ -198,6 +199,7 @@ try {
     }
   }
   if ($oldLockHash -ne $newLockHash) {
+    $dependencyTouched = $true
     Write-Host "Dependency lock changed. Installing locked dependencies ..."
     Push-Location -LiteralPath $project
     try {
@@ -240,6 +242,12 @@ try {
     }
     foreach ($rel in $removed) {
       try { Copy-Relative $saved $project $rel } catch { Write-Warning "Could not restore removed file: $rel" }
+    }
+    if ($dependencyTouched) {
+      # A failed npm install might leave node_modules partially changed.
+      # Force the normal launcher to reconcile packages on its next startup.
+      Remove-Item -LiteralPath (Join-Path $project ".vira-deps.hash") -Force -ErrorAction SilentlyContinue
+      Write-Host "Dependencies will be checked again by START-WINDOWS.bat." -ForegroundColor Yellow
     }
     Write-Host "Original data/ and uploads/ were never overwritten." -ForegroundColor Yellow
   }
