@@ -18,10 +18,17 @@ export async function POST(req:NextRequest){
   return bad("Не удалось подтвердить отмену регистрации.");
  try{
   const hash=createHash("sha256").update(token).digest("hex");
+  // Erase the pending name, password hash and verification code immediately.
+  // Retain only email and the send-rate window until routine expiry cleanup,
+  // otherwise cancelling/restarting could bypass the per-address SMTP quota.
   const result=await getPool().query(
-   "DELETE FROM shop_customer_signup_codes WHERE email=$1 AND cancel_token_hash=$2 RETURNING email",
+   `UPDATE shop_customer_signup_codes SET
+     name='Отменена',password_hash='',code_hash='',cancel_token_hash=NULL,
+     expires_at=NOW()-INTERVAL '1 second',failed_attempts=0
+     WHERE email=$1 AND cancel_token_hash=$2 AND expires_at>NOW()
+     RETURNING email`,
    [email,hash]);
-  // Same response whether a pending signup has expired or does not exist.
+  // A cancelled or expired signup can never be verified or used to log in.
   return NextResponse.json({cancelled:result.rowCount===1},{headers:noStore});
  }catch(err){return publicError(err);}
 }
