@@ -40,7 +40,13 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
     if (!isCategoryId(id)) return NextResponse.json({ error: "Некорректный ID." }, { status: 400 });
 
     let moveToCategoryId: string | null = null;
-    if (request.body !== null) {
+    // Some Next.js versions provide a stream even for empty DELETE requests.
+    // Only parse a transfer payload when JSON is explicitly provided.
+    const mediaType = request.headers.get("content-type")?.toLowerCase() ?? "";
+    if (mediaType && !mediaType.startsWith("application/json")) {
+      return NextResponse.json({ error: "Для переноса товаров требуется JSON." }, { status: 400 });
+    }
+    if (mediaType.startsWith("application/json")) {
       let body: unknown;
       try { body = await readJson(request); }
       catch { return NextResponse.json({ error: "Неверные параметры переноса товаров." }, { status: 400 }); }
