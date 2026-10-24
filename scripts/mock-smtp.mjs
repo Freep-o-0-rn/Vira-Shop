@@ -18,11 +18,11 @@ const server=tls.createServer({key,cert},socket=>{
    if(inData){
     if(line==="."){
      const message=bodyLines.join("\n");
-     const payload=message.split(/\n\n/).slice(1).join("\n").replace(/\s/g,"");
+     const payload=/Content-Type: text\/plain; charset=UTF-8\nContent-Transfer-Encoding: base64\n\n([\s\S]*?)\n--vira_/i.exec(message)?.[1]?.replace(/\s/g,"")??"";
      const decoded=Buffer.from(payload,"base64").toString("utf8");
-     const code=/регистрации в Vira Shop:\s*(\d{6})/.exec(decoded)?.[1];
+     const code=/(?:регистрации|удаления аккаунта) Vira Shop:\s*(\d{6})/.exec(decoded)?.[1];
      if(!code){reply("554","Missing verification code");continue;}
-     writeFileSync(output,JSON.stringify({to:recipient,code}),"utf8");
+     writeFileSync(output,JSON.stringify({to:recipient,code,kind:decoded.includes("удаления аккаунта")?"delete":"signup"}),"utf8");
      bodyLines=[];inData=false;
      reply("250","Saved");
     }else bodyLines.push(line);
