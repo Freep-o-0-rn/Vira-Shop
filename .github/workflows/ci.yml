@@ -104,6 +104,7 @@ jobs:
       - run: npm run db:seed
       - run: npm run typecheck
       - run: npm run build
+      - run: node --experimental-strip-types scripts/test-smtp.mjs --check
       - name: Test real TLS SMTP handshake and full signup flow (local fixture)
         shell: bash
         run: |
