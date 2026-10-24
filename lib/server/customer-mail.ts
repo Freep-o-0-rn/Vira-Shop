@@ -126,16 +126,16 @@ export async function sendVerificationEmail(recipient:string,code:string,purpose
 <tr><td style="background:#2864ff;height:5px;font-size:0;line-height:5px;border-radius:18px 18px 0 0">&nbsp;</td></tr>
 <tr><td style="padding:32px 30px">
 <p style="margin:0 0 28px;font-size:20px;font-weight:bold;color:#142448"><span style="display:inline-block;background:#2864ff;color:#fff;border-radius:10px;padding:9px 12px;margin-right:9px;font-size:17px">V.</span> vira<span style="color:#2864ff">shop</span></p>
-<h1 style="font-size:24px;line-height:1.25;margin:0 0 14px;color:#132443">${{headline}</h1>
-<p style="font-size:14px;line-height:1.7;color:#657690;margin:0 0 22px">${{description}</p>
+<h1 style="font-size:24px;line-height:1.25;margin:0 0 14px;color:#132443">${headline}</h1>
+<p style="font-size:14px;line-height:1.7;color:#657690;margin:0 0 22px">${description}</p>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-radius:14px;background:#eff4ff;border:1px solid #d4e1ff">
 <tr><td style="text-align:center;padding:26px 12px">
 <p style="color:#687da5;font-size:11px;font-weight:bold;letter-spacing:1.3px;margin:0 0 13px">ВАШ КОД ПОДТВЕРЖДЕНИЯ</p>
-<p style="font-size:36px;line-height:1.2;letter-spacing:5px;font-weight:bold;color:#2864ff;margin:0;font-variant-numeric:tabular-nums">${{code.slice(0,3)} ${{code.slice(3)}</p>
+<p style="font-size:36px;line-height:1.2;letter-spacing:5px;font-weight:bold;color:#2864ff;margin:0;font-variant-numeric:tabular-nums">${code.slice(0,3)} ${code.slice(3)}</p>
 <p style="font-size:12px;color:#677b9a;margin:13px 0 0">Действует 10 минут</p>
 </td></tr></table>
 <p style="font-size:13px;line-height:1.6;color:#4c5f7c;margin:24px 0 8px"><strong>Не сообщайте этот код никому.</strong> Сотрудники Vira Shop никогда не запрашивают его.</p>
-<p style="font-size:12px;line-height:1.6;color:#8190a8;margin:0 0 24px">${{deletion?"Если это действие запросили не вы — просто не вводите код.":"Если вы не регистрировались — просто проигнорируйте письмо."}</p>
+<p style="font-size:12px;line-height:1.6;color:#8190a8;margin:0 0 24px">${deletion?"Если это действие запросили не вы — просто не вводите код.":"Если вы не регистрировались — просто проигнорируйте письмо."}</p>
 <p style="border-top:1px solid #edf1f8;padding-top:20px;font-size:12px;color:#8696ae;margin:0;text-align:center">Vira Shop · v54.shop<br>Автоматическое сообщение, отвечать не нужно.</p>
 </td></tr></table>
 </body></html>`;
