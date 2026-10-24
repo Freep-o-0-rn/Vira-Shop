@@ -530,3 +530,11 @@
 .checkout-delivery-methods>label.is-unavailable{background:#f8faff;border-style:dashed;opacity:.77;cursor:default}
 .checkout-delivery-methods>label.is-unavailable strong{color:#697c97}
 @media(max-width:620px){.admin-logistics-fields{grid-template-columns:1fr}.admin-logistics-section{padding:11px}.admin-logistics-fields label.full{grid-column:auto}}
+
+/* Safe category removal: clearly distinguish destructive confirmation from normal save. */
+.admin-delete-note{font-size:13px;line-height:1.65;color:#53627d;margin:16px 0}
+.admin-delete-target{display:flex;flex-direction:column;gap:9px;font-size:13px;font-weight:700;color:#283c61;margin-top:20px}
+.admin-delete-target select{width:100%;min-height:44px;border:1px solid #d6dfec;border-radius:9px;padding:10px 12px;background:#fff;color:#152f56;font:inherit}
+.admin-delete-error{font-size:13px;color:#a62a3d;background:#fff2f4;padding:10px 12px;border-radius:8px;margin-top:15px}
+.admin-form-bottom button.admin-delete-confirm{border:0;background:#bd324b;color:#fff;font-size:13px;font-weight:700;border-radius:10px;padding:12px 18px}
+.admin-form-bottom button.admin-delete-confirm:disabled{opacity:.45;cursor:not-allowed}
