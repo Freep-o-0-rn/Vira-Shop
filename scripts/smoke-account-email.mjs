@@ -74,8 +74,45 @@ await call("/api/account/password",{method:"POST",status:401,cookie:verified.coo
 await call("/api/account/password",{method:"POST",cookie:verified.cookie,
  body:{currentPassword:password,newPassword:"Changed-test-pass-2026"}});
 assert.equal((await call("/api/account/session",{cookie:verified.cookie})).data.customer,null);
-const login=await call("/api/account/session",{method:"POST",body:{email,password:"Changed-test-pass-2026"}});
+let login=await call("/api/account/session",{method:"POST",body:{email,password:"Changed-test-pass-2026"}});
 assert.ok(login.cookie);
+
+// Password guessing: after 5 wrong passwords a sixth attempt is locked out.
+for(let i=0;i<5;i++){
+ await call("/api/account/session",{method:"POST",status:401,body:{email,password:"Guess-invalid-pass-123"}});
+}
+await call("/api/account/session",{method:"POST",status:429,
+ body:{email,password:"Changed-test-pass-2026"}});
+// Unknown emails and existing emails receive the same password reset response.
+const missingEmail="missing_"+randomUUID().slice(0,8)+"@example.test";
+const beforeResetMail=JSON.parse(readFileSync(outbox,"utf8"));
+const unknownReset=await call("/api/account/password-reset/request",{method:"POST",body:{email:missingEmail}});
+assert.equal(unknownReset.data.ok,true);
+assert.deepEqual(JSON.parse(readFileSync(outbox,"utf8")),beforeResetMail);
+const recovery=await call("/api/account/password-reset/request",{method:"POST",body:{email}});
+assert.equal(recovery.data.ok,true);
+assert.deepEqual(recovery.data,unknownReset.data);
+const resetMail=JSON.parse(readFileSync(outbox,"utf8"));
+assert.equal(resetMail.to,email);
+assert.equal(resetMail.kind,"reset");
+assert.match(resetMail.code,/^\\d{6}$/);
+const repeated=await call("/api/account/password-reset/request",{method:"POST",body:{email}});
+assert.deepEqual(repeated.data,recovery.data);
+assert.deepEqual(JSON.parse(readFileSync(outbox,"utf8")),resetMail);
+await call("/api/account/password-reset/confirm",{method:"POST",status:400,body:{
+ email,code:"000000"===resetMail.code?"111111":"000000",newPassword:"Recovered-test-pass-2026"}});
+const reset=await call("/api/account/password-reset/confirm",{method:"POST",body:{
+ email,code:resetMail.code,newPassword:"Recovered-test-pass-2026"}});
+assert.equal(reset.data.reloginRequired,true);
+assert.equal((await call("/api/account/session",{cookie:login.cookie})).data.customer,null);
+await call("/api/account/password-reset/confirm",{method:"POST",status:400,body:{
+ email,code:resetMail.code,newPassword:"Other-reused-pass-2026"}});
+await call("/api/account/session",{method:"POST",status:401,
+ body:{email,password:"Changed-test-pass-2026"}});
+login=await call("/api/account/session",{method:"POST",
+ body:{email,password:"Recovered-test-pass-2026"}});
+assert.ok(login.cookie);
+
 
 // Create an unfinished order and prove deletion cannot break its fulfillment.
 const admin=await call("/api/admin/session",{method:"POST",
