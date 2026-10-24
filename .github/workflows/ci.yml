@@ -40,6 +40,8 @@ jobs:
       - name: API integration tests (embedded local DB)
         run: |
           npm run start -- --port 3000 > /tmp/vira-server.log 2>&1 &
+          echo "Testing original homepage, catalog and demo-image routes"
+          timeout 50s node scripts/smoke-demo-images.mjs || (cat /tmp/vira-server.log && exit 1)
           echo "Testing admin API"
           timeout 110s node scripts/smoke-admin.mjs || (cat /tmp/vira-server.log && exit 1)
           echo "Testing catalog API"
@@ -76,3 +78,15 @@ jobs:
         run: npm run db:seed
       - name: Repeat initialization without destroying data
         run: npm run db:seed
+
+  stable-windows-node22:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+      - run: node scripts/test-production-routes.mjs
