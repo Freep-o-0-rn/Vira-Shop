@@ -47,7 +47,7 @@ function checkOutgoingQuota(){
 }
 
 // One SMTP connection per email: properly handle multiline responses and TLS failures.
-export async function sendVerificationEmail(recipient:string,code:string,purpose:"signup"|"account-delete"="signup"):Promise<void>{
+export async function sendVerificationEmail(recipient:string,code:string,purpose:"signup"|"account-delete"|"password-reset"="signup"):Promise<void>{
  const host=smtpInput(process.env.SMTP_HOST?.trim()||"smtp.yandex.ru","host");
  const port=Number(process.env.SMTP_PORT||"465");
  if(!Number.isSafeInteger(port)||port<1||port>65535)throw new Error("Invalid SMTP port");
@@ -107,15 +107,23 @@ export async function sendVerificationEmail(recipient:string,code:string,purpose
   await expect("RCPT TO:<"+to+">",[250,251]);
   await expect("DATA",[354]);
   const deletion=purpose==="account-delete";
-  const subject=deletion?"Подтверждение удаления аккаунта Vira Shop":"Ваш код подтверждения Vira Shop";
-  const headline=deletion?"Подтвердите удаление аккаунта":"Подтвердите вашу почту";
+  const recovery=purpose==="password-reset";
+  const subject=deletion?"Подтверждение удаления аккаунта Vira Shop":
+   recovery?"Восстановление пароля Vira Shop":"Ваш код подтверждения Vira Shop";
+  const headline=deletion?"Подтвердите удаление аккаунта":
+   recovery?"Восстановите доступ к Vira Shop":"Подтвердите вашу почту";
   const description=deletion?
    "Введите этот код в личном кабинете, чтобы подтвердить удаление аккаунта Vira Shop.":
+   recovery?"Используйте этот код, чтобы установить новый пароль для аккаунта Vira Shop.":
    "Введите этот код на сайте, чтобы завершить регистрацию в Vira Shop.";
   const text=deletion?
    "Код подтверждения удаления аккаунта Vira Shop: "+code+
    "\n\nСрок действия: 10 минут. Никому не сообщайте этот код."+
    "\nЕсли вы не запрашивали удаление, никому не сообщайте код и проверьте безопасность аккаунта.":
+   recovery?
+   "Код восстановления пароля Vira Shop: "+code+
+   "\n\nСрок действия: 10 минут. Никому не сообщайте этот код."+
+   "\nЕсли вы не запрашивали восстановление пароля, просто проигнорируйте письмо.":
    "Код подтверждения регистрации в Vira Shop: "+code+
    "\n\nСрок действия: 10 минут. Никому не сообщайте этот код."+
    "\nЕсли вы не регистрировались, просто проигнорируйте письмо.";
@@ -135,7 +143,7 @@ export async function sendVerificationEmail(recipient:string,code:string,purpose
 <p style="font-size:12px;color:#677b9a;margin:13px 0 0">Действует 10 минут</p>
 </td></tr></table>
 <p style="font-size:13px;line-height:1.6;color:#4c5f7c;margin:24px 0 8px"><strong>Не сообщайте этот код никому.</strong> Сотрудники Vira Shop никогда не запрашивают его.</p>
-<p style="font-size:12px;line-height:1.6;color:#8190a8;margin:0 0 24px">${deletion?"Если это действие запросили не вы — просто не вводите код.":"Если вы не регистрировались — просто проигнорируйте письмо."}</p>
+<p style="font-size:12px;line-height:1.6;color:#8190a8;margin:0 0 24px">${deletion?"Если это действие запросили не вы — просто не вводите код.":recovery?"Если вы не запрашивали восстановление пароля — проигнорируйте письмо.":"Если вы не регистрировались — просто проигнорируйте письмо."}</p>
 <p style="border-top:1px solid #edf1f8;padding-top:20px;font-size:12px;color:#8696ae;margin:0;text-align:center">Vira Shop · v54.shop<br>Автоматическое сообщение, отвечать не нужно.</p>
 </td></tr></table>
 </body></html>`;
