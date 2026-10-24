@@ -24,6 +24,9 @@ export default function AccountPortal(){
  const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [tab,setTab]=useState<"login"|"register">("login");
  const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[name,setName]=useState("");
+ const [confirmPassword,setConfirmPassword]=useState("");
+ const [verificationOn,setVerificationOn]=useState(false);
+ const [verificationEmail,setVerificationEmail]=useState(""),[verificationCode,setVerificationCode]=useState("");
  const [addresses,setAddresses]=useState<Address[]>([]),[orders,setOrders]=useState<Order[]>([]);
  const [address,setAddress]=useState({...EMPTY}),[error,setError]=useState(""),[notice,setNotice]=useState("");
  async function refresh(){
@@ -36,9 +39,9 @@ export default function AccountPortal(){
  }
  useEffect(()=>{
   let active=true;
-  api<{customer:Customer|null}>("/api/account/session").then(async x=>{
+  api<{customer:Customer|null;verificationEnabled?:boolean}>("/api/account/session").then(async x=>{
    if(!active)return;
-   setCustomer(x.customer);
+   setCustomer(x.customer);setVerificationOn(Boolean(x.verificationEnabled));
    if(x.customer)await refresh();
   }).catch(e=>{if(active)setError(String(e.message))}).finally(()=>{if(active)setLoading(false)});
   return()=>{active=false};
@@ -46,12 +49,40 @@ export default function AccountPortal(){
  async function submit(event:FormEvent<HTMLFormElement>){
   event.preventDefault();setBusy(true);setError("");setNotice("");
   try{
-   if(tab==="register")await api("/api/account/register",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({name,email,password})});
-   else await api("/api/account/session",{method:"POST",headers:{"Content-Type":"application/json"},
+   if(tab==="register"){
+    if(password!==confirmPassword)throw Error("Пароли не совпадают.");
+    const result=await api<{verificationRequired?:boolean;email?:string}>("/api/account/register",{
+     method:"POST",headers:{"Content-Type":"application/json"},
+     body:JSON.stringify({name,email,password})});
+    if(result.verificationRequired){
+     setVerificationEmail(result.email||email.trim().toLowerCase());
+     setPassword("");setConfirmPassword("");
+     setNotice("Код отправлен на электронную почту и действует 10 минут.");
+     return;
+    }
+   }else await api("/api/account/session",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({email,password})});
-   setPassword("");await refresh();setNotice("Вход выполнен. Теперь можно оформлять заказы.");
+   setPassword("");setConfirmPassword("");await refresh();setNotice("Вход выполнен.");
   }catch(e){setError(e instanceof Error?e.message:"Ошибка входа.");}
+  finally{setBusy(false);}
+ }
+ async function verifyEmail(event:FormEvent<HTMLFormElement>){
+  event.preventDefault();setBusy(true);setError("");setNotice("");
+  try{
+   await api("/api/account/verify",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({email:verificationEmail,code:verificationCode})});
+   setVerificationEmail("");setVerificationCode("");await refresh();
+   setNotice("Почта подтверждена, аккаунт создан.");
+  }catch(e){setError(e instanceof Error?e.message:"Ошибка подтверждения.");}
+  finally{setBusy(false);}
+ }
+ async function resendCode(){
+  setBusy(true);setError("");setNotice("");
+  try{
+   await api("/api/account/resend",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({email:verificationEmail})});
+   setNotice("Новое письмо отправлено. Код действует 10 минут.");
+  }catch(e){setError(e instanceof Error?e.message:"Не удалось отправить письмо.");}
   finally{setBusy(false);}
  }
  async function saveAddress(event:FormEvent<HTMLFormElement>){
@@ -83,16 +114,37 @@ export default function AccountPortal(){
   {error&&<p className="buyer-error" role="alert">{error}</p>}
   {notice&&<p className="buyer-notice" role="status">{notice}</p>}
   {loading?<div className="buyer-panel">Загрузка профиля…</div>:!customer?
+   verificationEmail?
    <section className="buyer-auth buyer-panel">
-    <div className="buyer-tabs"><button className={tab==="login"?"selected":""} onClick={()=>setTab("login")}>Войти</button>
-     <button className={tab==="register"?"selected":""} onClick={()=>setTab("register")}>Регистрация</button></div>
-    <h2>{tab==="login"?"Вход в аккаунт":"Создать аккаунт"}</h2>
-    <p>Данные хранятся в вашей локальной PostgreSQL. Пока это тестовая версия без проверки email.</p>
+    <h2>Подтвердите почту</h2>
+    <p className="buyer-muted">Введите код из письма на <strong>{verificationEmail}</strong>. Он действителен 10 минут.</p>
+    <form className="buyer-form" onSubmit={e=>void verifyEmail(e)}>
+     <label>Шестизначный код<input required autoComplete="one-time-code" inputMode="numeric"
+      pattern="[0-9]{6}" maxLength={6} placeholder="000000"
+      value={verificationCode} onChange={e=>setVerificationCode(e.target.value.replace(/\D/g,"").slice(0,6))}/></label>
+     <button type="submit" className="buyer-primary" disabled={busy||verificationCode.length!==6}>
+      {busy?"Проверяем…":"Подтвердить email"}</button>
+    </form>
+    <div className="buyer-auth-actions">
+     <button type="button" disabled={busy} onClick={()=>void resendCode()}>Отправить код повторно</button>
+     <button type="button" disabled={busy} onClick={()=>{setVerificationEmail("");setVerificationCode("");setError("");setNotice("");}}>Изменить email</button>
+    </div>
+   </section>:
+   <section className="buyer-auth buyer-panel">
+    <div className="buyer-tabs"><button type="button" className={tab==="login"?"selected":""} onClick={()=>{setTab("login");setError("");}}>Войти</button>
+     <button type="button" className={tab==="register"?"selected":""} onClick={()=>{setTab("register");setError("");}}>Регистрация</button></div>
+    <h2>{tab==="login"?"С возвращением":"Создать аккаунт"}</h2>
+    <p className="buyer-muted">{tab==="register"&&verificationOn?"После заполнения формы подтвердите email кодом из письма.":
+     tab==="register"?"Для покупок и отслеживания заказов.":"Введите email и пароль, чтобы увидеть свои заказы."}</p>
     <form onSubmit={e=>void submit(e)} className="buyer-form">
      {tab==="register"&&<label>Имя<input required minLength={2} maxLength={120} autoComplete="name" value={name} onChange={e=>setName(e.target.value)}/></label>}
-     <label>Email<input required type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)}/></label>
-     <label>Пароль (от 6 символов)<input required type="password" minLength={6} maxLength={256} autoComplete={tab==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)}/></label>
-     <button type="submit" disabled={busy} className="buyer-primary">{busy?"Обработка…":tab==="register"?"Зарегистрироваться":"Войти"}</button>
+     <label>Email<input required type="email" autoComplete="email" placeholder="name@example.com" value={email} onChange={e=>setEmail(e.target.value)}/></label>
+     <label>Пароль<input required type="password" minLength={tab==="register"&&verificationOn?8:6} maxLength={256}
+      autoComplete={tab==="register"?"new-password":"current-password"}
+      placeholder={tab==="register"?"Минимум 8 символов":"Ваш пароль"} value={password} onChange={e=>setPassword(e.target.value)}/></label>
+     {tab==="register"&&<label>Повторите пароль<input required type="password" minLength={verificationOn?8:6} maxLength={256}
+      autoComplete="new-password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></label>}
+     <button type="submit" disabled={busy} className="buyer-primary">{busy?"Обработка…":tab==="register"?"Продолжить":"Войти"}</button>
     </form>
    </section>:
    <>
