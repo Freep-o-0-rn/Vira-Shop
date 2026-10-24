@@ -34,6 +34,18 @@ function body64(text:string):string {
  return encoded.match(/.{1,76}/g)?.join("\r\n")??"";
 }
 
+// This store currently runs a single Next.js process. Cap aggregate outgoing
+// verification email so arbitrary internet traffic cannot exhaust the mailbox quota.
+// Persistent per-address throttling is enforced separately in the database.
+let hourStart=Date.now(),dayStart=Date.now(),hourCount=0,dayCount=0;
+function checkOutgoingQuota(){
+ const now=Date.now();
+ if(now-hourStart>=3600000){hourStart=now;hourCount=0;}
+ if(now-dayStart>=86400000){dayStart=now;dayCount=0;}
+ if(hourCount>=30||dayCount>=120)throw new Error("SMTP verification sending quota reached");
+ hourCount++;dayCount++;
+}
+
 // One SMTP connection per email: properly handle multiline responses and TLS failures.
 export async function sendVerificationEmail(recipient:string,code:string):Promise<void>{
  const host=smtpInput(process.env.SMTP_HOST?.trim()||"smtp.yandex.ru","host");
@@ -44,6 +56,7 @@ export async function sendVerificationEmail(recipient:string,code:string):Promis
  if(!password)throw new Error("Missing SMTP password");
  const to=smtpAddress(recipient);
  if(!/^\d{6}$/.test(code))throw new Error("Invalid verification code");
+ checkOutgoingQuota();
  const socket:TLSSocket=tls.connect({host,port,servername:host,rejectUnauthorized:true});
  socket.setTimeout(15000,()=>socket.destroy(new Error("SMTP response timeout")));
  const queue:Reply[]=[];
