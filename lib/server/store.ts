@@ -1,3 +1,4 @@
+import { localDemoPhoto } from "@/lib/demo-image-url";
 import { categories as demoCategories, products as demoProducts, type Product, type ProductSpec, type StoreCategory } from "@/lib/catalog";
 import { databaseEnabled, getPool } from "@/lib/server/db";
 
@@ -37,8 +38,8 @@ const columns = `p.id, p.title, p.subtitle, p.category_id AS category,
  (p.variant_groups <> '[]'::jsonb) AS has_variants`;
 
 function mapProduct(row: Row): Product {
-  const images = Array.isArray(row.images) && row.images.length ? row.images :
-    (row.image_url ? [row.image_url] : []);
+  const images = (Array.isArray(row.images) && row.images.length ? row.images :
+    (row.image_url ? [row.image_url] : [])).map(localDemoPhoto);
   return {
     id: row.id, title: row.title, subtitle: row.subtitle, category: row.category,
     price: Number(row.price_minor) / 100,
