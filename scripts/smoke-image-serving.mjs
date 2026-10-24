@@ -27,6 +27,14 @@ try {
     }
   }
   assert.ok(response, "shop server is not responding");
+  // The homepage and catalog must be present in the production Next build.
+  // A broken/stale .next build can start successfully yet return 404 for /.
+  for (const route of ["/", "/catalog"]) {
+    const page = await fetch("http://127.0.0.1:3000" + route);
+    assert.equal(page.status, 200, `production page ${route} must return 200 (not 404)`);
+    const html = await page.text();
+    assert.ok(html.includes("Vira Shop") || html.includes("vira"), `page ${route} must be the real storefront`);
+  }
   assert.equal(response.status, 200, "new upload must be served immediately");
   assert.equal(response.headers.get("content-type"), "image/png");
   const bytes = Buffer.from(await response.arrayBuffer());
