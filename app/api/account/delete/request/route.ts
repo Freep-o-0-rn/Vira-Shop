@@ -14,6 +14,7 @@ export async function POST(req:NextRequest){
   const id=auth.customer!.id;
   const code=randomInt(0,1000000).toString().padStart(6,"0");
   const hash=await hashPassword(code);
+  let recipient="";
   const client=await getPool().connect();
   try{
    await client.query("BEGIN");
@@ -46,19 +47,20 @@ export async function POST(req:NextRequest){
       THEN 1 ELSE shop_customer_deletion_codes.sent_in_window+1 END,
      window_started_at=CASE WHEN shop_customer_deletion_codes.window_started_at<NOW()-INTERVAL '1 hour'
       THEN NOW() ELSE shop_customer_deletion_codes.window_started_at END`,[id,hash]);
+   recipient=c.rows[0].email;
    await client.query("COMMIT");
-   // Do not hold a PGlite connection while waiting for SMTP.
-   try{await sendVerificationEmail(c.rows[0].email,code,"account-delete");}
-   catch(err){
-    console.error("[Vira Shop] Account deletion SMTP failed:",err instanceof Error?err.message:"unknown");
-    await getPool().query("UPDATE shop_customer_deletion_codes SET resend_after=NOW() WHERE customer_id=$1 AND code_hash=$2",
-     [id,hash]).catch(()=>{});
-    return bad("Не удалось отправить письмо. Попробуйте ещё раз.",503);
-   }
-   return NextResponse.json({ok:true,expiresInSeconds:600},{headers:noStore});
   }catch(err){
    try{await client.query("ROLLBACK");}catch{}
    return publicError(err);
   }finally{client.release();}
+  // Release the single embedded DB connection before the SMTP network request.
+  try{await sendVerificationEmail(recipient,code,"account-delete");}
+  catch(err){
+   console.error("[Vira Shop] Account deletion SMTP failed:",err instanceof Error?err.message:"unknown");
+   await getPool().query("UPDATE shop_customer_deletion_codes SET resend_after=NOW() WHERE customer_id=$1 AND code_hash=$2",
+    [id,hash]).catch(()=>{});
+   return bad("Не удалось отправить письмо. Попробуйте ещё раз.",503);
+  }
+  return NextResponse.json({ok:true,expiresInSeconds:600},{headers:noStore});
  }catch(err){return publicError(err);}
 }
