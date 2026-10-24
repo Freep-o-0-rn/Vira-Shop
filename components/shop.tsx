@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { catalogHref, defaultCatalogRoute, parseCatalogRoute, pathToView, specFilterKey, type CatalogOrder, type CatalogRoute, type StorefrontView } from "@/lib/catalog-route";
-import { categories as demoCategories, products as demoProducts, rub, type Category, type Product, type ProductSpec, type StoreCategory } from "@/lib/catalog";
+import { rub, type Category, type Product, type ProductSpec, type StoreCategory } from "@/lib/catalog";
 
 type View = StorefrontView;
 type Sort = CatalogOrder;
@@ -77,12 +77,14 @@ function ProductCard({ p, liked, quantity, onLike, onAdd }: { p: Product; liked:
   </article>;
 }
 export default function Shop({initialView="home"}:{initialView?:View}) {
-  const [catalog, setCatalog] = useState<Product[]>(demoProducts);
+  const [catalog, setCatalog] = useState<Product[]>([]);
   const [pageProducts, setPageProducts] = useState<Product[]>([]);
   const [savedProducts, setSavedProducts] = useState<Product[]>([]);
-  const [storeCategories, setStoreCategories] = useState<StoreCategory[]>(demoCategories);
+  const [storeCategories, setStoreCategories] = useState<StoreCategory[]>([]);
   const [catalogSource, setCatalogSource] = useState<"loading" | "demo" | "database" | "error">("loading");
   const [view, setView] = useState<View>(initialView);
+  const [filtersOpen,setFiltersOpen]=useState(false);
+  const [homeReloadKey,setHomeReloadKey]=useState(0);
   const [category, setCategory] = useState<Category | "all">("all");
   const [query, setQuery] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
@@ -154,7 +156,7 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
     }
     void loadHome();
     return ()=>{cancelled=true};
-  }, []);
+  }, [homeReloadKey]);
   useEffect(()=>{
     if(!urlReady||view!=="catalog")return;
     const controller=new AbortController();
@@ -267,6 +269,7 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
     navigate(catalogHref({...(reset?defaultCatalogRoute:route),...changes}));
   };
   const openCategory=(id:Category|"all")=>{
+    setFiltersOpen(false);
     catalogNavigate({category:id==="all"?"":id,page:1,specs:[]},view!=="catalog");
   };
   const add=(id:string)=>{
@@ -301,7 +304,9 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
       return {...current,[article]:{...row,quantity:next}};
     });
   };
-  const resetFilters=()=>catalogNavigate({},true);
+  const resetFilters=()=>{setMinPrice("");setMaxPrice("");setFiltersOpen(false);catalogNavigate({},true);};
+  const filterCount=Number(category!=="all")+Number(Boolean(query))+Number(Boolean(appliedMin||appliedMax))+Number(inStock)+specs.length;
+  const hasActiveFilters=filterCount>0;
   const toggleSpec=(item:ProductSpec)=>{
     const key=specFilterKey(item);
     const selected=specs.some(spec=>specFilterKey(spec)===key);
@@ -321,6 +326,13 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
     {items.map(p=><ProductCard key={p.id} p={p} liked={favorites.includes(p.id)}
       quantity={cart[p.id]||0} onLike={()=>toggleLike(p.id)} onAdd={()=>p.hasVariants?window.location.assign("/product/"+encodeURIComponent(p.id)):add(p.id)}/>)}
   </div>;
+  const renderHomeProducts=(items:Product[],count:number)=>catalogSource==="loading"?
+   <div className="product-grid" role="status" aria-label="Загружаем товары">
+    {Array.from({length:count},(_,i)=><div key={i} className="storefront-product-skeleton">
+     <div className="storefront-skeleton-image"/>
+     <div className="storefront-skeleton-content"><span/><span/><span/></div>
+    </div>)}
+   </div>:renderProducts(items);
   const searchSubmit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); catalogNavigate({q:searchDraft.trim(),category:"",specs:[],page:1},view!=="catalog"); };
   return <>
     <div className="announcement"><span>Vira Shop · создаём удобные покупки</span><span>Демонстрационная версия · онлайн-оплата пока недоступна</span></div>
@@ -337,12 +349,13 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
       </div>
     </header>
     <main className="container main-content">
-      <div className={"data-status status-" + catalogSource} role="status">
-        {catalogSource === "loading" ? "Загружаем каталог…" :
-          catalogSource === "database" ? "Каталог загружается из PostgreSQL" :
-          catalogSource === "error" ? "Серверный каталог недоступен · временно показаны демонстрационные товары" :
-          "Демонстрационный каталог · подключение к PostgreSQL пока не настроено"}
-      </div>
+      {catalogSource==="error"&&<div className="storefront-service-notice" role="alert">
+       <span>Не удалось загрузить товары. Проверьте подключение и попробуйте ещё раз.</span>
+       <button type="button" onClick={()=>{setCatalogSource("loading");setHomeReloadKey(k=>k+1);}}>Повторить загрузку</button>
+      </div>}
+      {catalogSource==="demo"&&<div className="storefront-demo-notice" role="status">
+       Показаны демонстрационные товары. Онлайн-оплата отключена.
+      </div>}
       {view === "home" && <>
         <div className="breadcrumb">Главная <span>·</span> Выбирайте то, что нравится</div>
         <section className="hero">
@@ -351,11 +364,13 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
         </section>
         <div className="feature-row"><div><span>✦</span><p><strong>Большой выбор</strong><small>Каталог уже доступен</small></p></div><div><span>♻</span><p><strong>Удобная корзина</strong><small>Сохранение в браузере</small></p></div><div><span>◇</span><p><strong>Простой поиск</strong><small>По названиям товаров</small></p></div><div><span>✓</span><p><strong>Продуманный дизайн</strong><small>На телефоне и ПК</small></p></div></div>
         <section className="section"><div className="section-top"><div><span className="kicker">НАВИГАЦИЯ</span><h2>Популярные категории</h2></div><button type="button" className="link-more" onClick={() => openCategory("all")}>Все категории <Icon name="arrow"/></button></div>
-          <div className="category-grid">{storeCategories.map((c) => <button type="button" className={"category-card " + c.tone} key={c.id} onClick={() => openCategory(c.id)}><span className="category-emoji">{c.emoji}</span><strong>{c.title}</strong><small>Посмотреть товары ↗</small></button>)}</div>
+          <div className="category-grid">{catalogSource==="loading"?
+           Array.from({length:5},(_,i)=><div className="storefront-category-skeleton" key={i} aria-hidden="true"><span/><span/></div>):
+           storeCategories.map((c) => <button type="button" className={"category-card " + c.tone} key={c.id} onClick={() => openCategory(c.id)}><span className="category-emoji">{c.emoji}</span><strong>{c.title}</strong><small>Посмотреть товары ↗</small></button>)}</div>
         </section>
-        <section className="section"><div className="section-top"><div><span className="kicker">ПОДБОРКА ДНЯ</span><h2>Популярные товары <span className="title-star">✳</span></h2></div><button type="button" className="link-more" onClick={() => openCategory("all")}>Все товары <Icon name="arrow"/></button></div>{renderProducts(catalog.slice(0, 8))}</section>
+        <section className="section"><div className="section-top"><div><span className="kicker">ПОДБОРКА ДНЯ</span><h2>Популярные товары <span className="title-star">✳</span></h2></div><button type="button" className="link-more" onClick={() => openCategory("all")}>Все товары <Icon name="arrow"/></button></div>{renderHomeProducts(catalog.slice(0, 8),8)}</section>
         <section className="wide-promo"><div><span>ПРОСТО ВЫБИРАТЬ</span><h2>Вещи, которые делают<br/>каждый день лучше</h2><button type="button" onClick={() => openCategory("home")}>Для дома и уюта <Icon name="arrow"/></button></div><div className="promo-art">✳ <span>📦</span> ✦</div></section>
-        <section className="section"><div className="section-top"><div><span className="kicker">ЕЩЁ БОЛЬШЕ ИДЕЙ</span><h2>Вам может понравиться</h2></div></div>{renderProducts(catalog.slice(8))}</section>
+        {(catalogSource==="loading"||catalog.length>8)&&<section className="section"><div className="section-top"><div><span className="kicker">ЕЩЁ БОЛЬШЕ ИДЕЙ</span><h2>Вам может понравиться</h2></div></div>{renderHomeProducts(catalog.slice(8),4)}</section>}
       </>}
       {view === "catalog" && <section className="inner-page">
         <div className="page-heading"><div><span className="kicker">ВЫБИРАЙТЕ С УДОВОЛЬСТВИЕМ</span>
@@ -367,8 +382,15 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
           {storeCategories.map(c=><button key={c.id} className={category===c.id?"selected":""}
             onClick={()=>openCategory(c.id)}>{c.emoji} {c.title}</button>)}
         </div>
+        <div className="catalog-mobile-controls">
+          <button type="button" className="catalog-mobile-filter-toggle" aria-expanded={filtersOpen}
+           aria-controls="catalog-filter-panel" onClick={()=>setFiltersOpen(current=>!current)}>
+            <span aria-hidden="true">☷</span> Фильтры {filterCount>0&&<b>{filterCount}</b>}
+            <span aria-hidden="true">{filtersOpen?"−":"+"}</span>
+          </button>
+        </div>
         <div className="catalog-layout">
-          <aside className="catalog-filters">
+          <aside id="catalog-filter-panel" className={"catalog-filters"+(filtersOpen?" is-open":"")}>
             <h2>Фильтры</h2>
             <form onSubmit={applyPrices}>
               <label>Цена от, ₽<input type="number" min="0" step=".01" value={minPrice}
@@ -397,7 +419,8 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
                 })}
               </fieldset>)}
             </div>
-            <button type="button" className="filter-reset" onClick={resetFilters}>Сбросить фильтры</button>
+            <button type="button" className="filter-reset" onClick={resetFilters}>Сбросить всё</button>
+            <button type="button" className="catalog-mobile-filter-done" onClick={()=>setFiltersOpen(false)}>Показать товары</button>
           </aside>
           <div className="catalog-results">
             <div className="catalog-toolbar"><span>Найдено: {totalCount}</span>
@@ -409,14 +432,27 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
                 <option value="rating">По рейтингу</option>
               </select></label>
             </div>
-            {specs.length>0&&<div className="selected-specs" aria-label="Выбранные характеристики">
+            {hasActiveFilters&&<div className="selected-specs storefront-selected-filters" aria-label="Активные фильтры">
+              {query&&<button type="button" onClick={()=>catalogNavigate({q:"",page:1})}>Поиск: {query} <span aria-hidden="true">×</span></button>}
+              {category!=="all"&&<button type="button" onClick={()=>openCategory("all")}>
+               {storeCategories.find(c=>c.id===category)?.title??category} <span aria-hidden="true">×</span>
+              </button>}
+              {(appliedMin||appliedMax)&&<button type="button" onClick={()=>{setMinPrice("");setMaxPrice("");catalogNavigate({minPrice:"",maxPrice:"",page:1});}}>
+                Цена: {appliedMin||"0"}–{appliedMax||"∞"} ₽ <span aria-hidden="true">×</span>
+              </button>}
+              {inStock&&<button type="button" onClick={()=>catalogNavigate({inStock:false,page:1})}>В наличии <span aria-hidden="true">×</span></button>}
               {specs.map(spec=><button key={specFilterKey(spec)} type="button"
                 onClick={()=>toggleSpec(spec)} aria-label={"Убрать фильтр "+spec.name+": "+spec.value}>
                 {spec.name}: {spec.value} <span aria-hidden="true">×</span>
               </button>)}
+              <button type="button" className="storefront-clear-filters" onClick={resetFilters}>Очистить всё</button>
             </div>}
             {pageError && <p role="alert" className="catalog-error">{pageError}</p>}
-            {pageLoading?<div className="catalog-loading" role="status">Загружаем товары…</div>:
+            {pageLoading?<div className="product-grid catalog-loading-skeleton" role="status" aria-label="Загружаем товары">
+              {Array.from({length:6},(_,i)=><div key={i} className="storefront-product-skeleton">
+               <div className="storefront-skeleton-image"/><div className="storefront-skeleton-content"><span/><span/><span/></div>
+              </div>)}
+             </div>:
             pageProducts.length?renderProducts(pageProducts):
             !pageError?<div className="empty-panel"><span>🔎</span><h2>Ничего не найдено</h2>
               <p>Попробуйте изменить поиск или диапазон цен.</p>
@@ -457,6 +493,18 @@ export default function Shop({initialView="home"}:{initialView?:View}) {
           : <div className="empty-panel"><span>🛒</span><h2>Корзина пуста</h2><p>Добавьте товары из каталога, чтобы увидеть их здесь.</p><button onClick={() => openCategory("all")}>Перейти в каталог</button></div>}
       </section>}
     </main>
+    <nav className="site-mobile-bottom-nav" aria-label="Быстрая навигация">
+      {([["home","Главная","grid"],["catalog","Каталог","search"],["favorites","Избранное","heart"],["cart","Корзина","bag"]] as const).map(([target,label,icon])=>
+       <button type="button" key={target} aria-current={view===target?"page":undefined}
+        className={view===target?"active":""} onClick={()=>go(target)}>
+        <Icon name={icon}/><span>{label}</span>
+        {target==="cart"&&cartCount>0&&<small>{cartCount}</small>}
+        {target==="favorites"&&favorites.length>0&&<small>{favorites.length}</small>}
+       </button>)}
+      <button type="button" onClick={()=>window.location.assign("/account")}>
+       <Icon name="user"/><span>Кабинет</span>
+      </button>
+    </nav>
     <footer className="site-footer"><div className="container footer-body"><div><div className="footer-logo">v.<span>vira shop</span></div><p>Удобный магазин начинается с мелочей. Мы только начинаем.</p></div><div><strong>Покупателям</strong><button onClick={() => openCategory("all")}>Каталог</button><button onClick={() => go("favorites")}>Избранное</button><button onClick={() => go("cart")}>Корзина</button></div><div><strong>О проекте</strong><p>Этап 0.7 · Навигация по каталогу</p><p>Тестовые заявки доступны · онлайн-оплата отключена.</p></div></div><div className="container footer-bottom"><span>© {new Date().getFullYear()} Vira Shop</span><span>Next.js · React · TypeScript</span></div></footer>
 
   </>;
