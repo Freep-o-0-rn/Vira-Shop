@@ -81,3 +81,38 @@ jobs:
         run: npm run db:seed
       - name: Repeat initialization without destroying data
         run: npm run db:seed
+
+  verified-signup:
+    runs-on: ubuntu-latest
+    env:
+      APP_ORIGIN: http://127.0.0.1:3000
+      ACCOUNT_EMAIL_VERIFICATION: '1'
+      SMTP_HOST: localhost
+      SMTP_PORT: '1465'
+      SMTP_USER: test@v54.shop
+      SMTP_PASSWORD: local-test-password
+      MOCK_SMTP_KEY: /tmp/vira-smtp-key.pem
+      MOCK_SMTP_CERT: /tmp/vira-smtp-cert.pem
+      MOCK_SMTP_MAIL_FILE: /tmp/vira-last-mail.json
+      VIRA_LOCAL_UPLOADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --no-audit --no-fund
+      - run: npm run db:seed
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Test real TLS SMTP handshake and full signup flow (local fixture)
+        shell: bash
+        run: |
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout /tmp/vira-smtp-key.pem -out /tmp/vira-smtp-cert.pem \
+            -days 1 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost" >/dev/null 2>&1
+          export NODE_EXTRA_CA_CERTS=/tmp/vira-smtp-cert.pem
+          node scripts/mock-smtp.mjs > /tmp/vira-mock-smtp.log 2>&1 &
+          nextpid=""
+          trap 'kill $(jobs -pr) 2>/dev/null || true' EXIT
+          ./node_modules/.bin/next start --port 3000 > /tmp/vira-verified-server.log 2>&1 &
+          timeout 90s node scripts/smoke-account-email.mjs || (cat /tmp/vira-mock-smtp.log /tmp/vira-verified-server.log && exit 1)
